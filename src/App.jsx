@@ -4,7 +4,7 @@ import { Heart, X, Star, User, ArrowRight, Download, CheckCircle, Loader2, Camer
 
 // --- 配置 ---
 // 默认地址
-const DEFAULT_API_URL = 'https://crowd-municipal-unbroken.ngrok-free.dev'; 
+const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'https://crowd-municipal-unbroken.ngrok-free.dev';
 
 // 问卷题目列表
 const PRE_QUESTIONS = [
@@ -345,14 +345,16 @@ export default function App() {
   const generateMockData = () => {
     const mockStimuli = [];
     let idCounter = 1;
-    for(let i=0; i<4; i++) {
-        mockStimuli.push({id: `mock_self_${idCounter++}`, url: `https://api.dicebear.com/7.x/avataaars/svg?seed=self${i}`, type: 'self_morph', ratio_self: (i % 6) * 0.2, description: `Self Morph ${(i%6)*20}% (Demo)`});
+    const ratios = [0, 0.2, 0.4, 0.6, 0.8, 1];
+    for(let faceIndex=1; faceIndex<=3; faceIndex++) {
+      for(const ratio of ratios) {
+        mockStimuli.push({id: `mock_self_${idCounter++}`, url: `https://api.dicebear.com/7.x/avataaars/svg?seed=self${faceIndex}`, type: 'self_morph', ratio_self: ratio, description: `Self Morph ${ratio*100}% / Face ${faceIndex} (Demo)`});
+      }
     }
-    for(let i=0; i<4; i++) {
-        mockStimuli.push({id: `mock_partner_${idCounter++}`, url: `https://api.dicebear.com/7.x/avataaars/svg?seed=partner${i}`, type: 'partner_morph', ratio_partner: (i % 6) * 0.2, description: `Partner Morph ${(i%6)*20}% (Demo)`});
-    }
-    for(let i=0; i<4; i++) {
-        mockStimuli.push({id: `mock_random_${idCounter++}`, url: `https://api.dicebear.com/7.x/avataaars/svg?seed=random${i}`, type: 'random_opposite', ratio_self: 0, description: `Random Face (Demo)`});
+    for(let faceIndex=1; faceIndex<=3; faceIndex++) {
+      for(const ratio of ratios) {
+        mockStimuli.push({id: `mock_partner_${idCounter++}`, url: `https://api.dicebear.com/7.x/avataaars/svg?seed=partner${faceIndex}`, type: 'partner_morph', ratio_partner: ratio, description: `Partner Morph ${ratio*100}% / Face ${faceIndex} (Demo)`});
+      }
     }
     return mockStimuli.sort(() => Math.random() - 0.5);
   };
