@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 // 引入图标库
 import { Heart, X, Star, User, ArrowRight, Download, CheckCircle, Loader2, Camera, RefreshCw, Check, UploadCloud, AlertCircle, Image as ImageIcon, Clock, ShoppingCart, Maximize, Minimize, RefreshCcw } from 'lucide-react';
 
@@ -69,23 +69,28 @@ const CameraCapture = ({ onCapture, label, instruction }) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
+  const streamRef = useRef(null);
   const [stream, setStream] = useState(null);
   const [image, setImage] = useState(null);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    startCamera();
-    return () => stopCamera();
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setStream(null);
   }, []);
 
-  const startCamera = async () => {
+  const startCamera = useCallback(async () => {
     try {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
       const mediaStream = await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } 
       });
+      streamRef.current = mediaStream;
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
@@ -93,15 +98,20 @@ const CameraCapture = ({ onCapture, label, instruction }) => {
       setError(null);
     } catch (err) {
       console.warn("Camera access failed", err);
+      setError("Camera access is unavailable. Please upload a photo instead.");
     }
-  };
+  }, []);
 
-  const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
-    }
-  };
+  useEffect(() => {
+    const startTimer = window.setTimeout(() => {
+      startCamera();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(startTimer);
+      stopCamera();
+    };
+  }, [startCamera, stopCamera]);
 
   const takePhoto = () => {
     const video = videoRef.current;
@@ -129,7 +139,9 @@ const CameraCapture = ({ onCapture, label, instruction }) => {
 
   const retake = () => {
     setImage(null);
-    startCamera();
+    if (!streamRef.current) {
+      startCamera();
+    }
   };
 
   const confirm = () => {
@@ -204,7 +216,22 @@ export default function App() {
   const [isDemoMode, setIsDemoMode] = useState(false); 
   const [profileTimer, setProfileTimer] = useState(10); 
   const [condition, setCondition] = useState('relationship'); 
-  const [participantId, setParticipantId] = useState(null); 
+  const [participantId, setParticipantId] = useState(null);
+
+  // 照片知情同意
+  const [selfPhotoConsent, setSelfPhotoConsent] = useState(null);
+  const [partnerPhotoConsent, setPartnerPhotoConsent] = useState(null);
+
+  // 后端为本次两张照片生成的文件夹编号
+  const [photoBatchId, setPhotoBatchId] = useState(null);
+
+  // 用来区分“正常完成”和“知情同意未通过”
+  const [endReason, setEndReason] = useState(null);
+
+  // 只有两个确认都是 yes，才算获得完整同意
+  const consentGranted =
+    selfPhotoConsent === 'yes' &&
+    partnerPhotoConsent === 'yes';
 
   const scrollContainerRef = useRef(null);
 
@@ -215,23 +242,35 @@ export default function App() {
     console.log(`Experiment Condition Assigned: ${randomCondition}`);
   }, []);
 
-  // 页面滚动和自动保存
-  useEffect(() => {
-    window.scrollTo(0, 0);
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = 0;
-    }
-    if (phase !== 'gender_select') {
-        saveDataToServer(true); 
-    }
-  }, [phase]);
+    // 页面滚动和自动保存
+    useEffect(() => {
+        window.scrollTo(0, 0);
 
-  // 数据更新自动保存
-  useEffect(() => {
-    if (data.length > 0) {
-        saveDataToServer(true); 
-    }
-  }, [data]);
+        if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = 0;
+        }
+
+        // 未同意使用照片前，不向后端保存任何实验数据
+        // finish 页面由“Finish Experiment”按钮执行正式保存
+        const phasesWithoutAutoSave = [
+            'gender_select',
+            'face_instructions',
+            'photo_consent',
+            'finish',
+            'end'
+        ];
+
+        if (consentGranted && !phasesWithoutAutoSave.includes(phase)) {
+            saveDataToServer(true);
+        }
+    }, [phase, consentGranted]);
+
+    // 正式实验开始后，试次数据发生变化时自动备份
+    useEffect(() => {
+        if (consentGranted && data.length > 0 && phase !== 'finish') {
+            saveDataToServer(true);
+        }
+    }, [data, consentGranted, phase]);
 
   // --- 事件处理函数 ---
 
@@ -244,7 +283,37 @@ export default function App() {
   };
 
   const handleGenderConfirm = () => {
-    setPhase('upload_self'); 
+    // 先展示面孔合成说明，再取得照片使用同意
+    setPhase('face_instructions');
+  };
+
+  const endBecauseConsentDeclined = () => {
+    // 知情同意在照片上传前完成；退出时同时清除前端照片状态
+    setSelfPhoto(null);
+    setPartnerPhoto(null);
+    setPhotoBatchId(null);
+    setEndReason('consent_declined');
+    setPhase('end');
+  };
+
+  const handleSelfConsent = (answer) => {
+    setSelfPhotoConsent(answer);
+  };
+
+  const handlePartnerConsent = (answer) => {
+    setPartnerPhotoConsent(answer);
+  };
+
+  const handleConsentContinue = () => {
+    const bothAnswered = selfPhotoConsent !== null && partnerPhotoConsent !== null;
+
+    if (!bothAnswered) return;
+
+    if (consentGranted) {
+      setPhase('upload_self');
+    } else {
+      endBecauseConsentDeclined();
+    }
   };
 
   const handleSelfCapture = (imgData) => {
@@ -315,6 +384,7 @@ export default function App() {
           
           const result = await response.json();
           setStimuli(result.images);
+          setPhotoBatchId(result.photo_batch_id || null);
           setPhase('instructions');
 
         } catch (error) {
@@ -324,6 +394,7 @@ export default function App() {
           setIsDemoMode(true); 
           const mockData = generateMockData();
           setStimuli(mockData); 
+          setPhotoBatchId(null);
           setPhase('instructions'); 
         }
       };
@@ -339,49 +410,98 @@ export default function App() {
   }, [phase, trialStep, currentTrialIndex]);
 
   // 数据保存逻辑
-  const saveDataToServer = async (isPartial = false) => {
+  const saveDataToServer = async (isPartial = false, isComplete = false) => {
     if (!isPartial) setSaveStatus('saving');
-    
+
     const exportData = {
-      participant_id: participantId, 
+      participant_id: participantId,
       timestamp: new Date().toISOString(),
-      condition_group: condition, 
+      condition_group: condition,
       gender_info: { self: selfGender, partner: partnerGender },
+      photo_consent: {
+        self_photo: selfPhotoConsent,
+        partner_photo: partnerPhotoConsent
+      },
+      photo_batch_id: photoBatchId,
       user_profile: userProfileText,
       pre_questionnaire: questionnaireAnswers,
       experiment_data: data,
       mode: isDemoMode ? 'demo' : 'production',
-      is_complete: phase === 'finish'
+      is_complete: isComplete
     };
 
     if (isDemoMode) {
-        if (!isPartial) setSaveStatus('saved'); 
-        return;
+        if (!isPartial) setSaveStatus('saved');
+        return true;
     }
 
     try {
-      const response = await fetch(`${apiUrl}/save_data`, { // 使用动态 apiUrl
+      const response = await fetch(`${apiUrl}/save_data`, {
          method: 'POST',
-         headers: { 
+         headers: {
            'Content-Type': 'application/json',
-           'ngrok-skip-browser-warning': 'true' 
+           'ngrok-skip-browser-warning': 'true'
          },
          body: JSON.stringify(exportData)
       });
-      
-      if(response.ok) {
-          const result = await response.json();
-          if (result.participant_id) {
-              setParticipantId(result.participant_id);
-          }
-          if (!isPartial) setSaveStatus('saved');
-      } else {
-          throw new Error('Upload failed');
+
+      if (!response.ok) {
+        throw new Error('Upload failed');
       }
+
+      const result = await response.json();
+      if (result.participant_id) {
+        setParticipantId(result.participant_id);
+      }
+      if (!isPartial) setSaveStatus('saved');
+      return true;
     } catch (e) {
       console.error(e);
       if (!isPartial) setSaveStatus('error');
+      return false;
     }
+  };
+
+  // 完成实验后，通知后端删除本次上传的两张照片
+  const deleteParticipantFaces = async () => {
+    if (isDemoMode || !photoBatchId) return true;
+
+    try {
+      const response = await fetch(`${apiUrl}/delete_participant_faces`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: JSON.stringify({ photo_batch_id: photoBatchId })
+      });
+
+      if (!response.ok) {
+        throw new Error('Photo deletion failed');
+      }
+      return true;
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
+  };
+
+  const handleFinishExperiment = async () => {
+    const dataSaved = await saveDataToServer(false, true);
+    if (!dataSaved) return;
+
+    const photosDeleted = await deleteParticipantFaces();
+    if (!photosDeleted) {
+      setSaveStatus('error');
+      return;
+    }
+
+    // 后端删除成功后，也清除浏览器内存中的照片数据
+    setSelfPhoto(null);
+    setPartnerPhoto(null);
+    setPhotoBatchId(null);
+    setEndReason('completed');
+    setPhase('end');
   };
 
   // --- Views ---
@@ -390,30 +510,81 @@ export default function App() {
     return (
       <Layout>
         <div className="flex flex-col items-center justify-center p-6 pt-20">
-            <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
+          <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
             <h1 className="text-2xl font-bold text-center mb-6">Basic Information</h1>
             <div className="mb-6">
-                <label className="block text-sm font-bold text-slate-700 mb-2">Your Gender</label>
-                <div className="flex gap-4">
+              <label className="block text-sm font-bold text-slate-700 mb-2">Your Gender</label>
+              <div className="flex gap-4">
                 <button onClick={() => setSelfGender('male')} className={`flex-1 py-3 rounded-lg border-2 ${selfGender === 'male' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200'}`}>Male</button>
                 <button onClick={() => setSelfGender('female')} className={`flex-1 py-3 rounded-lg border-2 ${selfGender === 'female' ? 'border-rose-500 bg-rose-50 text-rose-700' : 'border-slate-200'}`}>Female</button>
-                </div>
+              </div>
             </div>
             <div className="mb-8">
-                <label className="block text-sm font-bold text-slate-700 mb-2">Partner's Gender (or Preferred)</label>
-                <div className="flex gap-4">
+              <label className="block text-sm font-bold text-slate-700 mb-2">Partner&apos;s Gender (or Preferred)</label>
+              <div className="flex gap-4">
                 <button onClick={() => setPartnerGender('male')} className={`flex-1 py-3 rounded-lg border-2 ${partnerGender === 'male' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200'}`}>Male</button>
                 <button onClick={() => setPartnerGender('female')} className={`flex-1 py-3 rounded-lg border-2 ${partnerGender === 'female' ? 'border-rose-500 bg-rose-50 text-rose-700' : 'border-slate-200'}`}>Female</button>
-                </div>
+              </div>
             </div>
-            <button onClick={handleGenderConfirm} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition">Next: Upload Photos</button>
-            </div>
+            <button onClick={handleGenderConfirm} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition">Next</button>
+          </div>
         </div>
       </Layout>
     );
   }
 
-  if (phase === 'upload_self') {
+  if (phase === 'face_instructions') {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center p-6 pt-20 min-h-screen">
+          <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl">
+            <h2 className="text-2xl font-bold mb-6 text-slate-800">Face Morphing Task</h2>
+            <div className="text-slate-600 space-y-4 mb-8 leading-relaxed">
+              <p>In this part of the study, you will be asked to upload one photograph of yourself and one photograph of your partner.</p>
+              <p>These photographs will be used solely to create computer-generated face-morph images for this study. You will then view the resulting images and complete a series of face-rating tasks.</p>
+              <p>The photographs will be stored locally on the research computer, will be accessible only to the researcher, will not be shared with any third party, and will be permanently deleted after you complete the experiment.</p>
+            </div>
+            <button onClick={() => setPhase('photo_consent')} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition">Continue</button>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (phase === 'photo_consent') {
+    const bothAnswered = selfPhotoConsent !== null && partnerPhotoConsent !== null;
+
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center p-6 pt-20 min-h-screen">
+          <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl">
+            <h2 className="text-2xl font-bold mb-3 text-slate-800">Photo Use Confirmation</h2>
+            <p className="text-slate-600 mb-8">Please answer both statements below. After both answers have been selected, click Next to continue.</p>
+
+            <div className="mb-8 border-b border-slate-200 pb-8">
+              <p className="text-slate-700 leading-relaxed mb-4">1. I confirm that I have read and understood the information previously provided about this study, and I consent to the use of my photograph solely for facial synthesis in this study.</p>
+              <div className="flex gap-4">
+                <button type="button" onClick={() => handleSelfConsent('yes')} className={`flex-1 py-3 rounded-xl border-2 font-bold ${selfPhotoConsent === 'yes' ? 'border-green-500 bg-green-50 text-green-700' : 'border-slate-200 text-slate-700'}`}>Yes</button>
+                <button type="button" onClick={() => handleSelfConsent('no')} className={`flex-1 py-3 rounded-xl border-2 font-bold ${selfPhotoConsent === 'no' ? 'border-red-500 bg-red-50 text-red-700' : 'border-slate-200 text-slate-700'}`}>No</button>
+              </div>
+            </div>
+
+            <div className="mb-8">
+              <p className="text-slate-700 leading-relaxed mb-4">2. I confirm that my partner has received the relevant study information and has consented to the use of their photograph solely for facial synthesis in this study.</p>
+              <div className="flex gap-4">
+                <button type="button" onClick={() => handlePartnerConsent('yes')} className={`flex-1 py-3 rounded-xl border-2 font-bold ${partnerPhotoConsent === 'yes' ? 'border-green-500 bg-green-50 text-green-700' : 'border-slate-200 text-slate-700'}`}>Yes</button>
+                <button type="button" onClick={() => handlePartnerConsent('no')} className={`flex-1 py-3 rounded-xl border-2 font-bold ${partnerPhotoConsent === 'no' ? 'border-red-500 bg-red-50 text-red-700' : 'border-slate-200 text-slate-700'}`}>No</button>
+              </div>
+            </div>
+
+            <button type="button" disabled={!bothAnswered} onClick={handleConsentContinue} className={`w-full font-bold py-3 rounded-xl transition ${bothAnswered ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Next</button>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+    if (phase === 'upload_self') {
     return (
       <Layout>
         <div className="flex flex-col items-center justify-center p-6 pt-20">
@@ -443,12 +614,13 @@ export default function App() {
     return (
       <Layout>
         <div className="flex flex-col items-center justify-center p-6 pt-20 h-screen bg-slate-900">
-            <Loader2 size={64} className="animate-spin text-rose-500 mb-6" />
-            <h2 className="text-2xl font-bold mb-2 text-white">Processing Face Morphing...</h2>
-            <div className="text-slate-400 text-sm space-y-2 text-center">
-            <p>Connecting to AI Server ({apiUrl})...</p>
-            <p>This might take a while depending on your computer speed.</p>
-            </div>
+          <Loader2 size={64} className="animate-spin text-rose-500 mb-6" />
+          <h2 className="text-2xl font-bold mb-4 text-white text-center">Creating the Face-Morph Images...</h2>
+          <div className="text-slate-300 text-sm space-y-3 text-center max-w-md">
+            <p>This process usually takes about 2 minutes.</p>
+            <p>Please keep this page open and do not refresh or close your browser.</p>
+            <p className="text-slate-400">Your photographs are being processed on the research computer.</p>
+          </div>
         </div>
       </Layout>
     );
@@ -646,18 +818,46 @@ export default function App() {
     return (
       <Layout>
         <div className="flex flex-col items-center justify-center p-6 text-center min-h-screen">
+          <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-lg">
             <CheckCircle size={64} className="text-green-500 mx-auto mb-6" />
-            <h2 className="text-2xl font-bold mb-4">Experiment Completed</h2>
-            <p className="text-slate-500 mb-6">Thank you for your participation. Data is recorded.</p>
-            
-            {saveStatus === 'idle' && (
-            <button onClick={() => saveDataToServer(false)} className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl mb-4">Save Data (Download Local)</button>
+            <h2 className="text-2xl font-bold mb-4">Thank You</h2>
+            <p className="text-slate-600 mb-4">Thank you for taking part in this study. We sincerely appreciate your time and participation.</p>
+            <p className="text-slate-600 mb-8">
+              For more information, please visit the{' '}
+              <a href="https://www.un.org/" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-800">United Nations website</a>.
+            </p>
+
+            <button type="button" onClick={handleFinishExperiment} disabled={saveStatus === 'saving'} className={`w-full font-bold py-4 rounded-xl ${saveStatus === 'saving' ? 'bg-slate-300 text-slate-500 cursor-wait' : 'bg-slate-900 text-white hover:bg-slate-800'}`}>
+              {saveStatus === 'saving' ? 'Saving Data...' : 'Finish Experiment'}
+            </button>
+
+            {saveStatus === 'error' && <p className="text-red-500 font-bold mt-4">Data could not be saved or the photographs could not be deleted. Please keep this page open and try again.</p>}
+            {isDemoMode && <p className="text-xs text-amber-500 mt-4">Demo mode is active; no data was sent to the research computer.</p>}
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (phase === 'end') {
+    const consentWasDeclined = endReason === 'consent_declined';
+
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center p-6 text-center min-h-screen">
+          <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-lg">
+            {consentWasDeclined ? (
+              <AlertCircle size={64} className="text-slate-500 mx-auto mb-6" />
+            ) : (
+              <CheckCircle size={64} className="text-green-500 mx-auto mb-6" />
             )}
-            {saveStatus === 'saving' && <div className="text-slate-500 animate-pulse">Saving data...</div>}
-            {saveStatus === 'saved' && <div className="text-green-600 font-bold mb-4">Data saved successfully! File downloaded.</div>}
-            {saveStatus === 'error' && <div className="text-red-500 font-bold mb-4">Save failed, please try again.</div>}
-            
-            {isDemoMode && <p className="text-xs text-amber-500 mt-4">* Demo mode active, data saved locally only.</p>}
+            <h2 className="text-2xl font-bold mb-4">{consentWasDeclined ? 'Experiment Ended' : 'Experiment Complete'}</h2>
+            <p className="text-slate-600 leading-relaxed">
+              {consentWasDeclined
+                ? 'Thank you for your time. Because consent to use both photographs was not confirmed, you will not be able to continue with this study. No photographs have been uploaded or processed. You may now close this page.'
+                : 'Thank you for your participation. Your responses have been recorded, and the photographs uploaded for this study have been deleted. You may now close this page.'}
+            </p>
+          </div>
         </div>
       </Layout>
     );
