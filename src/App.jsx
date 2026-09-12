@@ -214,6 +214,7 @@ export default function App() {
   
   const [saveStatus, setSaveStatus] = useState('idle'); 
   const [isDemoMode, setIsDemoMode] = useState(false); 
+  const [processingError, setProcessingError] = useState('');
   const [profileTimer, setProfileTimer] = useState(10); 
   const [condition, setCondition] = useState('relationship'); 
   const [participantId, setParticipantId] = useState(null);
@@ -325,6 +326,7 @@ export default function App() {
   const handlePartnerCapture = (imgData) => {
     if (!imgData) return;
     setPartnerPhoto(imgData);
+    setProcessingError('');
     setTimeout(() => { setPhase('processing'); }, 100);
   };
 
@@ -378,8 +380,18 @@ export default function App() {
           });
           
           if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`Server status ${response.status}: ${errText.slice(0, 100)}`);
+            const errorBody = await response.json().catch(() => ({}));
+
+            if (response.status === 422 && errorBody.code === 'FACE_QUALITY_ERROR') {
+              setProcessingError(errorBody.error);
+              setSelfPhoto(null);
+              setPartnerPhoto(null);
+              setPhotoBatchId(null);
+              setPhase('photo_quality_error');
+              return;
+            }
+
+            throw new Error(`Server status ${response.status}: ${errorBody.error || 'Unknown error'}`);
           }
           
           const result = await response.json();
@@ -542,6 +554,7 @@ export default function App() {
             <div className="text-slate-600 space-y-4 mb-8 leading-relaxed">
               <p>In this part of the study, you will be asked to upload one photograph of yourself and one photograph of your partner.</p>
               <p>These photographs will be used solely to create computer-generated face-morph images for this study. You will then view the resulting images and complete a series of face-rating tasks.</p>
+              <p>For reliable face morphing, both photographs must show one clear, front-facing face without glasses, sunglasses, or face coverings.</p>
               <p>The photographs will be stored locally on the research computer, will be accessible only to the researcher, will not be shared with any third party, and will be permanently deleted after you complete the experiment.</p>
             </div>
             <button onClick={() => setPhase('photo_consent')} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition">Continue</button>
@@ -590,7 +603,7 @@ export default function App() {
         <div className="flex flex-col items-center justify-center p-6 pt-20">
             <div className="w-full bg-white p-6 rounded-2xl shadow-xl max-w-md">
             <div className="flex justify-center mb-4"><div className="w-full h-2 bg-slate-100 rounded-full"><div className="h-full bg-rose-500 w-1/3"></div></div></div>
-            <CameraCapture key="capture-self" label="Step 1/2: Take Your Photo" instruction="Please use a white background. Ensure your face is clear and well-lit." onCapture={handleSelfCapture} />
+            <CameraCapture key="capture-self" label="Step 1/2: Take Your Photo" instruction="Please use a white background, face the camera directly, and remove glasses, sunglasses, and face coverings. Ensure your face is clear and well-lit." onCapture={handleSelfCapture} />
             </div>
         </div>
       </Layout>
@@ -603,7 +616,7 @@ export default function App() {
         <div className="flex flex-col items-center justify-center p-6 pt-20">
             <div className="w-full bg-white p-6 rounded-2xl shadow-xl max-w-md">
             <div className="flex justify-center mb-4"><div className="w-full h-2 bg-slate-100 rounded-full"><div className="h-full bg-rose-500 w-2/3"></div></div></div>
-            <CameraCapture key="capture-partner" label="Step 2/2: Take Partner's Photo" instruction="If partner is not present, you can upload an existing photo." onCapture={handlePartnerCapture} />
+            <CameraCapture key="capture-partner" label="Step 2/2: Take Partner's Photo" instruction="Use a clear, front-facing photo without glasses, sunglasses, or face coverings. If your partner is not present, you may upload an existing photo that meets these requirements." onCapture={handlePartnerCapture} />
             </div>
         </div>
       </Layout>
@@ -620,6 +633,22 @@ export default function App() {
             <p>This process usually takes about 2 minutes.</p>
             <p>Please keep this page open and do not refresh or close your browser.</p>
             <p className="text-slate-400">Your photographs are being processed on the research computer.</p>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (phase === 'photo_quality_error') {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center p-6 min-h-screen">
+          <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-lg text-center">
+            <AlertCircle size={56} className="text-amber-500 mx-auto mb-5" />
+            <h2 className="text-2xl font-bold mb-4 text-slate-800">Photo Check Needed</h2>
+            <p className="text-slate-600 leading-relaxed mb-4">{processingError}</p>
+            <p className="text-sm text-slate-500 mb-8">Please retake or replace both photographs. Use a well-lit, front-facing image with no glasses, sunglasses, or face coverings.</p>
+            <button type="button" onClick={() => setPhase('upload_self')} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition">Retake Photos</button>
           </div>
         </div>
       </Layout>
