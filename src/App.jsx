@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 // 引入图标库
-import { Heart, X, Star, User, ArrowRight, Download, CheckCircle, Loader2, Camera, RefreshCw, Check, UploadCloud, AlertCircle, Image as ImageIcon, Clock, ShoppingCart, Maximize, Minimize, RefreshCcw } from 'lucide-react';
+import { Heart, X, Star, User, ArrowRight, Download, CheckCircle, Loader2, Camera, RefreshCw, Check, UploadCloud, AlertCircle, Image as ImageIcon, ShoppingCart, Maximize, Minimize, RefreshCcw } from 'lucide-react';
 
 // --- 配置 ---
 // 默认地址
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'https://crowd-municipal-unbroken.ngrok-free.dev';
 
-// 测试阶段使用 5 秒；正式实验时只需将此值改为 600。
-const PROFILE_WRITING_DURATION_SECONDS = 5;
 const FINAL_SAVE_RETRY_DELAYS_MS = [0, 1200, 3000];
 
 const createParticipantId = () => {
@@ -271,7 +269,6 @@ export default function App() {
   const [isDemoMode, setIsDemoMode] = useState(false); 
   const [processingError, setProcessingError] = useState('');
   const [saveError, setSaveError] = useState('');
-  const [profileTimer, setProfileTimer] = useState(PROFILE_WRITING_DURATION_SECONDS); 
   const [condition, setCondition] = useState('relationship'); 
   // 在浏览器端立即生成稳定编号，避免多个自动保存请求并发时被后端分配到不同记录。
   const [participantId, setParticipantId] = useState(createParticipantId);
@@ -343,17 +340,6 @@ export default function App() {
     setProcessingError('');
     setTimeout(() => { setPhase('processing'); }, 100);
   };
-
-  // 倒计时逻辑
-  useEffect(() => {
-    let interval;
-    if (phase === 'profile' && profileTimer > 0) {
-      interval = setInterval(() => {
-        setProfileTimer((prev) => prev - 1);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [phase, profileTimer]);
 
   // 生成模拟数据
   const generateMockData = () => {
@@ -688,8 +674,6 @@ export default function App() {
   }
 
   if (phase === 'profile') {
-     const minutes = Math.floor(profileTimer / 60);
-     const seconds = profileTimer % 60;
      return (
       <Layout>
         <div className="flex flex-col items-center justify-center p-6 pt-10">
@@ -714,29 +698,26 @@ export default function App() {
                     </>
                 ) : (
                     <>
-                        <p>This page requires you to identify and write in the box below about a recent retail experience you had. We won’t read or keep what you write (though we will check that you have written at least a few paragraphs of text), so please feel free to write in a disinhibited and unguarded way. The exercise is just about having you visualise a situation.</p>
+                        <p>This page requires you to identify and write for 10 minutes (in the box below) about a recent retail experience you had. We won’t read or keep what you write (though we will check that you have written at least a few paragraphs of text), so please feel free to write in a disinhibited and unguarded way. The exercise is just about having you visualise a situation.</p>
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                             <p className="mb-2">Please take time to think carefully about a time when you visited a <strong>grocery store alone</strong> to buy grocery products.</p>
                             <p>This must be a time when you were out shopping alone, with no friends or acquaintances.</p>
                         </div>
                         <p>You should now have a recent shopping time in mind. Please imagine the details of this trip.</p>
                         <p>Now you have the particular shopping trip in mind, imagine and describe the route from your home to the store, the appearance of the store, the ease with which you found what you were looking for and the groceries you purchased.</p>
-                        <p>Please write down as much as you can about this grocery store trip. The task will be timed.</p>
+                        <p>Please write down as much as you can about this grocery store trip and spend about 10 minutes on the writing task.</p>
                     </>
                 )}
             </div>
             <div className="mb-6">
-                <label className="block text-slate-700 font-bold mb-2 flex items-center gap-2 justify-between flex-wrap">
-                    <span>Your Response:</span>
-                    {profileTimer > 0 && (<span className="text-xs font-normal text-rose-500 bg-rose-50 px-2 py-1 rounded-full flex items-center gap-1 whitespace-nowrap"><Clock size={12}/> Time remaining: {minutes}:{seconds.toString().padStart(2, '0')}</span>)}
-                </label>
+                <label className="block text-slate-700 font-bold mb-2">Your Response:</label>
                 <textarea className="w-full border border-slate-300 rounded-xl p-4 h-80 focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all resize-y text-sm leading-relaxed" 
                     placeholder={condition === 'relationship' ? "There may be a particular time or example of these good things in the relationship that you could recall here. The task will be timed." : "Please write down as much as you can about this grocery store trip. The task will be timed."}
                     value={userProfileText} onChange={e=>setUserProfileText(e.target.value)} 
                 />
             </div>
-            <button disabled={profileTimer > 0} onClick={() => setPhase('questionnaire')} className={`w-full font-bold py-4 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${profileTimer > 0 ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-rose-500 hover:bg-rose-600 text-white shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'}`}>
-                {profileTimer > 0 ? <><Loader2 className="animate-spin" size={20} /><span className="whitespace-nowrap">Please reflect & write ({minutes}:{seconds.toString().padStart(2, '0')})</span></> : <><span>Next Step</span><ArrowRight size={20} /></>}
+            <button onClick={() => setPhase('questionnaire')} className="w-full font-bold py-4 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 bg-rose-500 hover:bg-rose-600 text-white shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
+                <span>Next Step</span><ArrowRight size={20} />
             </button>
             </div>
         </div>
