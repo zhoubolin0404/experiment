@@ -6,6 +6,61 @@ import { Heart, X, Star, User, ArrowRight, Download, CheckCircle, Loader2, Camer
 // 默认地址
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'https://crowd-municipal-unbroken.ngrok-free.dev';
 
+// 测试阶段使用 5 秒；正式实验时只需将此值改为 600。
+const PROFILE_WRITING_DURATION_SECONDS = 5;
+const FINAL_SAVE_RETRY_DELAYS_MS = [0, 1200, 3000];
+
+const createParticipantId = () => {
+  const randomPart = globalThis.crypto?.randomUUID
+    ? globalThis.crypto.randomUUID().replaceAll('-', '').slice(0, 12)
+    : Math.random().toString(36).slice(2, 14);
+  return `P_${Date.now()}_${randomPart}`;
+};
+
+const wait = (milliseconds) => new Promise(resolve => window.setTimeout(resolve, milliseconds));
+
+const requestJsonWithRetry = async (url, options, retryDelays = [0]) => {
+  let lastError;
+
+  for (let attempt = 0; attempt < retryDelays.length; attempt += 1) {
+    if (retryDelays[attempt] > 0) {
+      await wait(retryDelays[attempt]);
+    }
+
+    try {
+      const response = await fetch(url, options);
+      const responseText = await response.text();
+      let responseBody = {};
+
+      if (responseText) {
+        try {
+          responseBody = JSON.parse(responseText);
+        } catch {
+          responseBody = {};
+        }
+      }
+
+      if (!response.ok) {
+        const requestError = new Error(
+          responseBody.error || `Server returned status ${response.status}`
+        );
+        requestError.retryable = response.status === 429 || response.status >= 500;
+        throw requestError;
+      }
+
+      return responseBody;
+    } catch (error) {
+      lastError = error;
+      const hasAnotherAttempt = attempt < retryDelays.length - 1;
+      if (!hasAnotherAttempt || error.retryable === false) {
+        break;
+      }
+    }
+  }
+
+  throw lastError || new Error('Request failed');
+};
+
 // 问卷题目列表
 const PRE_QUESTIONS = [
   "comforted",
@@ -215,24 +270,14 @@ export default function App() {
   const [saveStatus, setSaveStatus] = useState('idle'); 
   const [isDemoMode, setIsDemoMode] = useState(false); 
   const [processingError, setProcessingError] = useState('');
-  const [profileTimer, setProfileTimer] = useState(10); 
+  const [saveError, setSaveError] = useState('');
+  const [profileTimer, setProfileTimer] = useState(PROFILE_WRITING_DURATION_SECONDS); 
   const [condition, setCondition] = useState('relationship'); 
-  const [participantId, setParticipantId] = useState(null);
-
-  // 照片知情同意
-  const [selfPhotoConsent, setSelfPhotoConsent] = useState(null);
-  const [partnerPhotoConsent, setPartnerPhotoConsent] = useState(null);
+  // 在浏览器端立即生成稳定编号，避免多个自动保存请求并发时被后端分配到不同记录。
+  const [participantId, setParticipantId] = useState(createParticipantId);
 
   // 后端为本次两张照片生成的文件夹编号
   const [photoBatchId, setPhotoBatchId] = useState(null);
-
-  // 用来区分“正常完成”和“知情同意未通过”
-  const [endReason, setEndReason] = useState(null);
-
-  // 只有两个确认都是 yes，才算获得完整同意
-  const consentGranted =
-    selfPhotoConsent === 'yes' &&
-    partnerPhotoConsent === 'yes';
 
   const scrollContainerRef = useRef(null);
 
@@ -251,27 +296,25 @@ export default function App() {
             scrollContainerRef.current.scrollTop = 0;
         }
 
-        // 未同意使用照片前，不向后端保存任何实验数据
         // finish 页面由“Finish Experiment”按钮执行正式保存
         const phasesWithoutAutoSave = [
             'gender_select',
             'face_instructions',
-            'photo_consent',
             'finish',
             'end'
         ];
 
-        if (consentGranted && !phasesWithoutAutoSave.includes(phase)) {
+        if (!phasesWithoutAutoSave.includes(phase)) {
             saveDataToServer(true);
         }
-    }, [phase, consentGranted]);
+    }, [phase]);
 
     // 正式实验开始后，试次数据发生变化时自动备份
     useEffect(() => {
-        if (consentGranted && data.length > 0 && phase !== 'finish') {
+        if (data.length > 0 && phase !== 'finish') {
             saveDataToServer(true);
         }
-    }, [data, consentGranted, phase]);
+    }, [data, phase]);
 
   // --- 事件处理函数 ---
 
@@ -284,37 +327,8 @@ export default function App() {
   };
 
   const handleGenderConfirm = () => {
-    // 先展示面孔合成说明，再取得照片使用同意
+    // 先展示面孔合成说明，再进入照片采集。
     setPhase('face_instructions');
-  };
-
-  const endBecauseConsentDeclined = () => {
-    // 知情同意在照片上传前完成；退出时同时清除前端照片状态
-    setSelfPhoto(null);
-    setPartnerPhoto(null);
-    setPhotoBatchId(null);
-    setEndReason('consent_declined');
-    setPhase('end');
-  };
-
-  const handleSelfConsent = (answer) => {
-    setSelfPhotoConsent(answer);
-  };
-
-  const handlePartnerConsent = (answer) => {
-    setPartnerPhotoConsent(answer);
-  };
-
-  const handleConsentContinue = () => {
-    const bothAnswered = selfPhotoConsent !== null && partnerPhotoConsent !== null;
-
-    if (!bothAnswered) return;
-
-    if (consentGranted) {
-      setPhase('upload_self');
-    } else {
-      endBecauseConsentDeclined();
-    }
   };
 
   const handleSelfCapture = (imgData) => {
@@ -425,17 +439,16 @@ export default function App() {
 
   // 数据保存逻辑
   const saveDataToServer = async (isPartial = false, isComplete = false) => {
-    if (!isPartial) setSaveStatus('saving');
+    if (!isPartial) {
+      setSaveStatus('saving');
+      setSaveError('');
+    }
 
     const exportData = {
       participant_id: participantId,
       timestamp: new Date().toISOString(),
       condition_group: condition,
       gender_info: { self: selfGender, partner: partnerGender },
-      photo_consent: {
-        self_photo: selfPhotoConsent,
-        partner_photo: partnerPhotoConsent
-      },
       photo_batch_id: photoBatchId,
       user_profile: userProfileText,
       pre_questionnaire: questionnaireAnswers,
@@ -450,20 +463,20 @@ export default function App() {
     }
 
     try {
-      const response = await fetch(`${apiUrl}/save_data`, {
-         method: 'POST',
-         headers: {
-           'Content-Type': 'application/json',
-           'ngrok-skip-browser-warning': 'true'
-         },
-         body: JSON.stringify(exportData)
-      });
+      const result = await requestJsonWithRetry(
+        `${apiUrl}/save_data`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'ngrok-skip-browser-warning': 'true'
+          },
+          body: JSON.stringify(exportData)
+        },
+        isPartial ? [0] : FINAL_SAVE_RETRY_DELAYS_MS
+      );
 
-      if (!response.ok) {
-        throw new Error('Upload failed');
-      }
-
-      const result = await response.json();
       if (result.participant_id) {
         setParticipantId(result.participant_id);
       }
@@ -471,7 +484,10 @@ export default function App() {
       return true;
     } catch (e) {
       console.error(e);
-      if (!isPartial) setSaveStatus('error');
+      if (!isPartial) {
+        setSaveError(`Final data upload failed: ${e.message}`);
+        setSaveStatus('error');
+      }
       return false;
     }
   };
@@ -481,21 +497,23 @@ export default function App() {
     if (isDemoMode || !photoBatchId) return true;
 
     try {
-      const response = await fetch(`${apiUrl}/delete_participant_faces`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true'
+      await requestJsonWithRetry(
+        `${apiUrl}/delete_participant_faces`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'ngrok-skip-browser-warning': 'true'
+          },
+          body: JSON.stringify({ photo_batch_id: photoBatchId })
         },
-        body: JSON.stringify({ photo_batch_id: photoBatchId })
-      });
-
-      if (!response.ok) {
-        throw new Error('Photo deletion failed');
-      }
+        FINAL_SAVE_RETRY_DELAYS_MS
+      );
       return true;
     } catch (e) {
       console.error(e);
+      setSaveError(`Data was saved, but photograph deletion failed: ${e.message}`);
       return false;
     }
   };
@@ -514,7 +532,6 @@ export default function App() {
     setSelfPhoto(null);
     setPartnerPhoto(null);
     setPhotoBatchId(null);
-    setEndReason('completed');
     setPhase('end');
   };
 
@@ -559,40 +576,7 @@ export default function App() {
               <p>For reliable face morphing, both photographs must show one clear, front-facing face without glasses, sunglasses, or face coverings.</p>
               <p>The photographs will be stored locally on the research computer, will be accessible only to the researcher, will not be shared with any third party, and will be permanently deleted after you complete the experiment.</p>
             </div>
-            <button onClick={() => setPhase('photo_consent')} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition">Continue</button>
-          </div>
-        </div>
-      </Layout>
-    );
-  }
-
-  if (phase === 'photo_consent') {
-    const bothAnswered = selfPhotoConsent !== null && partnerPhotoConsent !== null;
-
-    return (
-      <Layout>
-        <div className="flex flex-col items-center justify-center p-6 pt-20 min-h-screen">
-          <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl">
-            <h2 className="text-2xl font-bold mb-3 text-slate-800">Photo Use Confirmation</h2>
-            <p className="text-slate-600 mb-8">Please answer both statements below. After both answers have been selected, click Next to continue.</p>
-
-            <div className="mb-8 border-b border-slate-200 pb-8">
-              <p className="text-slate-700 leading-relaxed mb-4">1. I confirm that I have read and understood the information previously provided about this study, and I consent to the use of my photograph solely for facial synthesis in this study.</p>
-              <div className="flex gap-4">
-                <button type="button" onClick={() => handleSelfConsent('yes')} className={`flex-1 py-3 rounded-xl border-2 font-bold ${selfPhotoConsent === 'yes' ? 'border-green-500 bg-green-50 text-green-700' : 'border-slate-200 text-slate-700'}`}>Yes</button>
-                <button type="button" onClick={() => handleSelfConsent('no')} className={`flex-1 py-3 rounded-xl border-2 font-bold ${selfPhotoConsent === 'no' ? 'border-red-500 bg-red-50 text-red-700' : 'border-slate-200 text-slate-700'}`}>No</button>
-              </div>
-            </div>
-
-            <div className="mb-8">
-              <p className="text-slate-700 leading-relaxed mb-4">2. I confirm that my partner has received the relevant study information and has consented to the use of their photograph solely for facial synthesis in this study.</p>
-              <div className="flex gap-4">
-                <button type="button" onClick={() => handlePartnerConsent('yes')} className={`flex-1 py-3 rounded-xl border-2 font-bold ${partnerPhotoConsent === 'yes' ? 'border-green-500 bg-green-50 text-green-700' : 'border-slate-200 text-slate-700'}`}>Yes</button>
-                <button type="button" onClick={() => handlePartnerConsent('no')} className={`flex-1 py-3 rounded-xl border-2 font-bold ${partnerPhotoConsent === 'no' ? 'border-red-500 bg-red-50 text-red-700' : 'border-slate-200 text-slate-700'}`}>No</button>
-              </div>
-            </div>
-
-            <button type="button" disabled={!bothAnswered} onClick={handleConsentContinue} className={`w-full font-bold py-3 rounded-xl transition ${bothAnswered ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>Next</button>
+            <button onClick={() => setPhase('upload_self')} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition">Continue</button>
           </div>
         </div>
       </Layout>
@@ -709,7 +693,7 @@ export default function App() {
      return (
       <Layout>
         <div className="flex flex-col items-center justify-center p-6 pt-10">
-            <div ref={scrollContainerRef} className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl overflow-y-auto max-h-[85vh]">
+            <div ref={scrollContainerRef} className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-3xl overflow-y-auto max-h-[90vh]">
             <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-4">
                 <div className={`p-3 rounded-full ${condition === 'relationship' ? 'bg-rose-100 text-rose-500' : 'bg-blue-100 text-blue-500'}`}>
                 {condition === 'relationship' ? <Heart size={24} fill="currentColor" /> : <ShoppingCart size={24} />}
@@ -730,14 +714,14 @@ export default function App() {
                     </>
                 ) : (
                     <>
-                        <p>This page requires you to identify and write for 10 minutes (in the box below) about a recent retail experience you had. We won’t read or keep what you write (though we will check that you have written at least a few paragraphs of text), so please feel free to write in a disinhibited and unguarded way. The exercise is just about having you visualise a situation.</p>
+                        <p>This page requires you to identify and write in the box below about a recent retail experience you had. We won’t read or keep what you write (though we will check that you have written at least a few paragraphs of text), so please feel free to write in a disinhibited and unguarded way. The exercise is just about having you visualise a situation.</p>
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                             <p className="mb-2">Please take time to think carefully about a time when you visited a <strong>grocery store alone</strong> to buy grocery products.</p>
                             <p>This must be a time when you were out shopping alone, with no friends or acquaintances.</p>
                         </div>
                         <p>You should now have a recent shopping time in mind. Please imagine the details of this trip.</p>
                         <p>Now you have the particular shopping trip in mind, imagine and describe the route from your home to the store, the appearance of the store, the ease with which you found what you were looking for and the groceries you purchased.</p>
-                        <p>Please write down as much as you can about this grocery store trip. The task will be timed with a 10-minute countdown timer.</p>
+                        <p>Please write down as much as you can about this grocery store trip. The task will be timed.</p>
                     </>
                 )}
             </div>
@@ -746,7 +730,7 @@ export default function App() {
                     <span>Your Response:</span>
                     {profileTimer > 0 && (<span className="text-xs font-normal text-rose-500 bg-rose-50 px-2 py-1 rounded-full flex items-center gap-1 whitespace-nowrap"><Clock size={12}/> Time remaining: {minutes}:{seconds.toString().padStart(2, '0')}</span>)}
                 </label>
-                <textarea className="w-full border border-slate-300 rounded-xl p-4 h-48 focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all resize-none text-sm leading-relaxed" 
+                <textarea className="w-full border border-slate-300 rounded-xl p-4 h-80 focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all resize-y text-sm leading-relaxed" 
                     placeholder={condition === 'relationship' ? "There may be a particular time or example of these good things in the relationship that you could recall here. The task will be timed." : "Please write down as much as you can about this grocery store trip. The task will be timed."}
                     value={userProfileText} onChange={e=>setUserProfileText(e.target.value)} 
                 />
@@ -862,7 +846,7 @@ export default function App() {
               {saveStatus === 'saving' ? 'Saving Data...' : 'Finish Experiment'}
             </button>
 
-            {saveStatus === 'error' && <p className="text-red-500 font-bold mt-4">Data could not be saved or the photographs could not be deleted. Please keep this page open and try again.</p>}
+            {saveStatus === 'error' && <p className="text-red-500 font-bold mt-4">{saveError || 'The final operation failed. Please keep this page open and try again.'}</p>}
             {isDemoMode && <p className="text-xs text-amber-500 mt-4">Demo mode is active; no data was sent to the research computer.</p>}
           </div>
         </div>
@@ -871,22 +855,14 @@ export default function App() {
   }
 
   if (phase === 'end') {
-    const consentWasDeclined = endReason === 'consent_declined';
-
     return (
       <Layout>
         <div className="flex flex-col items-center justify-center p-6 text-center min-h-screen">
           <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-lg">
-            {consentWasDeclined ? (
-              <AlertCircle size={64} className="text-slate-500 mx-auto mb-6" />
-            ) : (
-              <CheckCircle size={64} className="text-green-500 mx-auto mb-6" />
-            )}
-            <h2 className="text-2xl font-bold mb-4">{consentWasDeclined ? 'Experiment Ended' : 'Experiment Complete'}</h2>
+            <CheckCircle size={64} className="text-green-500 mx-auto mb-6" />
+            <h2 className="text-2xl font-bold mb-4">Experiment Complete</h2>
             <p className="text-slate-600 leading-relaxed">
-              {consentWasDeclined
-                ? 'Thank you for your time. Because consent to use both photographs was not confirmed, you will not be able to continue with this study. No photographs have been uploaded or processed. You may now close this page.'
-                : 'Thank you for your participation. Your responses have been recorded, and the photographs uploaded for this study have been deleted. You may now close this page.'}
+              Thank you for your participation. Your responses have been recorded, and the photographs uploaded for this study have been deleted. You may now close this page.
             </p>
           </div>
         </div>
