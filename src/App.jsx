@@ -7,6 +7,7 @@ import { Heart, X, Star, User, ArrowRight, Download, CheckCircle, Loader2, Camer
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'https://crowd-municipal-unbroken.ngrok-free.dev';
 
 const FINAL_SAVE_RETRY_DELAYS_MS = [0, 1200, 3000];
+const PROFILE_MINIMUM_WAIT_SECONDS = 5;
 
 const createParticipantId = () => {
   const randomPart = globalThis.crypto?.randomUUID
@@ -275,6 +276,7 @@ export default function App() {
   const [processingError, setProcessingError] = useState('');
   const [saveError, setSaveError] = useState('');
   const [condition, setCondition] = useState('relationship'); 
+  const [profileWaitSeconds, setProfileWaitSeconds] = useState(PROFILE_MINIMUM_WAIT_SECONDS);
   // SONA 入口示例：/experiment?id=26893。该编号独立于系统参与者编号保存。
   const [sonaId] = useState(readSonaIdFromUrl);
   // 在浏览器端立即生成稳定编号，避免多个自动保存请求并发时被后端分配到不同记录。
@@ -347,6 +349,17 @@ export default function App() {
     setProcessingError('');
     setTimeout(() => { setPhase('processing'); }, 100);
   };
+
+  // 展示和测试用等待时间；不改变任务材料中关于正式书写时长的文字。
+  useEffect(() => {
+    if (phase !== 'profile' || profileWaitSeconds <= 0) return undefined;
+
+    const timer = window.setTimeout(() => {
+      setProfileWaitSeconds(previous => Math.max(0, previous - 1));
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [phase, profileWaitSeconds]);
 
   // 生成模拟数据
   const generateMockData = () => {
@@ -682,6 +695,12 @@ export default function App() {
   }
 
   if (phase === 'profile') {
+     const profileWordCount = userProfileText.trim()
+       ? userProfileText.trim().split(/\s+/).length
+       : 0;
+     const hasMinimumProfileWords = profileWordCount >= 20;
+     const hasCompletedProfileWait = profileWaitSeconds === 0;
+     const canContinueProfile = hasMinimumProfileWords && hasCompletedProfileWait;
      return (
       <Layout>
         <div className="flex flex-col items-center justify-center p-6 pt-10">
@@ -702,29 +721,41 @@ export default function App() {
                         </div>
                         <p>You should now have a person in mind. Please imagine what they look like and what it is like to be in their company.</p>
                         <p>Now you have the person in mind, think about how you do not worry about being abandoned by this person or worry that this person would try to get closer to you than you are comfortable being.</p>
-                        <p>Please write about this person, your shared time together, and how this person makes you feel safe, comforted, and loved. There may be a particular time or example of these good things in the relationship that you could recall here. The task will be timed.</p>
+                        <p>Please write about this person, your shared time together, and how this person makes you feel safe, comforted, and loved. There may be a particular time or example of these good things in the relationship that you could recall here. The task will be timed with a 10-minute countdown timer.</p>
                     </>
                 ) : (
                     <>
-                        <p>This page requires you to identify and write for 10 minutes (in the box below) about a recent retail experience you had. We won’t read or keep what you write (though we will check that you have written at least a few paragraphs of text), so please feel free to write in a disinhibited and unguarded way. The exercise is just about having you visualise a situation.</p>
+                        <p>To improve your planning skills, science has proven that the following method can be very helpful. <span className="font-semibold text-blue-600 block mt-1">Let&apos;s give it a try!</span></p>
+                        <p>This task requires you to identify and write for 10 minutes (in the box next page) about a recent retail experience you had. We won’t read or keep what you write (though we will check that you have written at least a few paragraphs of text), so please feel free to write in a disinhibited and unguarded way. The exercise is just about having you visualise a situation.</p>
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                             <p className="mb-2">Please take time to think carefully about a time when you visited a <strong>grocery store alone</strong> to buy grocery products.</p>
                             <p>This must be a time when you were out shopping alone, with no friends or acquaintances.</p>
                         </div>
                         <p>You should now have a recent shopping time in mind. Please imagine the details of this trip.</p>
-                        <p>Now you have the particular shopping trip in mind, imagine and describe the route from your home to the store, the appearance of the store, the ease with which you found what you were looking for and the groceries you purchased.</p>
-                        <p>Please write down as much as you can about this grocery store trip and spend about 10 minutes on the writing task.</p>
+                        <p>Now you have a particular shopping trip in mind, imagine and describe the route from your home to the store, the appearance of the store, the ease with which you found what you were looking for and the groceries you purchased.</p>
+                        <p>Please write down as much as you can about this grocery store trip. The task will be timed with a 10-minute countdown timer.</p>
                     </>
                 )}
             </div>
             <div className="mb-6">
-                <label className="block text-slate-700 font-bold mb-2">Your Response:</label>
+                <label className="flex items-center justify-between gap-3 text-slate-700 font-bold mb-2">
+                    <span>Your Response:</span>
+                    <span className={`text-xs font-medium ${hasMinimumProfileWords ? 'text-green-600' : 'text-slate-500'}`}>
+                        {profileWordCount}/20 words minimum
+                    </span>
+                </label>
                 <textarea className="w-full border border-slate-300 rounded-xl p-4 h-80 focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all resize-y text-sm leading-relaxed" 
                     placeholder={condition === 'relationship' ? "There may be a particular time or example of these good things in the relationship that you could recall here. The task will be timed." : "Please write down as much as you can about this grocery store trip. The task will be timed."}
                     value={userProfileText} onChange={e=>setUserProfileText(e.target.value)} 
                 />
+                {!hasMinimumProfileWords && (
+                    <p className="mt-2 text-xs text-rose-500">Please write at least 20 words before continuing.</p>
+                )}
+                {!hasCompletedProfileWait && (
+                    <p className="mt-2 text-xs text-slate-500">Next Step will be available in {profileWaitSeconds} seconds.</p>
+                )}
             </div>
-            <button onClick={() => setPhase('questionnaire')} className="w-full font-bold py-4 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 bg-rose-500 hover:bg-rose-600 text-white shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
+            <button disabled={!canContinueProfile} onClick={() => setPhase('questionnaire')} className={`w-full font-bold py-4 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${canContinueProfile ? 'bg-rose-500 hover:bg-rose-600 text-white shadow-lg hover:shadow-xl transform hover:-translate-y-0.5' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>
                 <span>Next Step</span><ArrowRight size={20} />
             </button>
             </div>
@@ -740,10 +771,14 @@ export default function App() {
         <div className="flex justify-center p-6 pt-20 min-h-screen">
             <div ref={scrollContainerRef} className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-md overflow-y-auto max-h-[85vh]">
             <h2 className="text-xl font-bold mb-4">Ratings</h2>
+            <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-relaxed text-slate-700">
+                <p className="mb-3">Please respond to the items below using the following 6-point scale, thinking about how the visualisation task you JUST PERFORMED makes you feel.</p>
+                <p className="font-medium">Thinking about the visualisation task I JUST PERFORMED makes me feel. (1 = not at all, 6 = very much)</p>
+            </div>
             {PRE_QUESTIONS.map((q, idx) => (
                 <div key={idx} className="mb-4 text-sm">
                     <p className="mb-2">{idx + 1}. {q}</p>
-                    <div className="flex justify-between">{[1,2,3,4,5,6,7].map(n=><button key={n} onClick={()=>setQuestionnaireAnswers(p=>({...p,[idx]:n}))} className={`w-8 h-8 rounded-full ${questionnaireAnswers[idx]===n?'bg-rose-500 text-white':'bg-slate-100'}`}>{n}</button>)}</div>
+                    <div className="flex justify-between">{[1,2,3,4,5,6].map(n=><button key={n} onClick={()=>setQuestionnaireAnswers(p=>({...p,[idx]:n}))} className={`w-8 h-8 rounded-full ${questionnaireAnswers[idx]===n?'bg-rose-500 text-white':'bg-slate-100'}`}>{n}</button>)}</div>
                 </div>
                 ))}
                 <button disabled={!isComplete} onClick={() => setPhase('experiment')} className={`w-full mt-4 font-bold py-3 rounded-xl ${!isComplete?'bg-slate-300':'bg-slate-900 text-white'}`}>Start Browsing (36 Photos)</button>
