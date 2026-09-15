@@ -493,7 +493,7 @@ export default function App() {
     } catch (e) {
       console.error(e);
       if (!isPartial) {
-        setSaveError(`Final data upload failed: ${e.message}`);
+        setSaveError(`Unable to complete the experiment: ${e.message}`);
         setSaveStatus('error');
       }
       return false;
