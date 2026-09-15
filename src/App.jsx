@@ -7,7 +7,8 @@ import { Heart, X, Star, User, ArrowRight, Download, CheckCircle, Loader2, Camer
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'https://crowd-municipal-unbroken.ngrok-free.dev';
 
 const FINAL_SAVE_RETRY_DELAYS_MS = [0, 1200, 3000];
-const PROFILE_MINIMUM_WAIT_SECONDS = 5;
+const PROFILE_MINIMUM_WAIT_SECONDS = 10;
+const PROFILE_MINIMUM_WORDS = 10;
 
 const createParticipantId = () => {
   const randomPart = globalThis.crypto?.randomUUID
@@ -698,7 +699,7 @@ export default function App() {
      const profileWordCount = userProfileText.trim()
        ? userProfileText.trim().split(/\s+/).length
        : 0;
-     const hasMinimumProfileWords = profileWordCount >= 20;
+     const hasMinimumProfileWords = profileWordCount >= PROFILE_MINIMUM_WORDS;
      const hasCompletedProfileWait = profileWaitSeconds === 0;
      const canContinueProfile = hasMinimumProfileWords && hasCompletedProfileWait;
      return (
@@ -741,7 +742,7 @@ export default function App() {
                 <label className="flex items-center justify-between gap-3 text-slate-700 font-bold mb-2">
                     <span>Your Response:</span>
                     <span className={`text-xs font-medium ${hasMinimumProfileWords ? 'text-green-600' : 'text-slate-500'}`}>
-                        {profileWordCount}/20 words minimum
+                        {profileWordCount}/{PROFILE_MINIMUM_WORDS} words minimum
                     </span>
                 </label>
                 <textarea className="w-full border border-slate-300 rounded-xl p-4 h-80 focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all resize-y text-sm leading-relaxed" 
@@ -749,7 +750,7 @@ export default function App() {
                     value={userProfileText} onChange={e=>setUserProfileText(e.target.value)} 
                 />
                 {!hasMinimumProfileWords && (
-                    <p className="mt-2 text-xs text-rose-500">Please write at least 20 words before continuing.</p>
+                    <p className="mt-2 text-xs text-rose-500">Please write at least {PROFILE_MINIMUM_WORDS} words before continuing.</p>
                 )}
                 {!hasCompletedProfileWait && (
                     <p className="mt-2 text-xs text-slate-500">Next Step will be available in {profileWaitSeconds} seconds.</p>
@@ -781,8 +782,31 @@ export default function App() {
                     <div className="flex justify-between">{[1,2,3,4,5,6].map(n=><button key={n} onClick={()=>setQuestionnaireAnswers(p=>({...p,[idx]:n}))} className={`w-8 h-8 rounded-full ${questionnaireAnswers[idx]===n?'bg-rose-500 text-white':'bg-slate-100'}`}>{n}</button>)}</div>
                 </div>
                 ))}
-                <button disabled={!isComplete} onClick={() => setPhase('experiment')} className={`w-full mt-4 font-bold py-3 rounded-xl ${!isComplete?'bg-slate-300':'bg-slate-900 text-white'}`}>Start Browsing (36 Photos)</button>
+                <button disabled={!isComplete} onClick={() => setPhase('face_rating_instructions')} className={`w-full mt-4 font-bold py-3 rounded-xl ${!isComplete?'bg-slate-300':'bg-slate-900 text-white'}`}>Continue</button>
             </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (phase === 'face_rating_instructions') {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center p-6 pt-20 min-h-screen">
+          <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl">
+            <h2 className="text-2xl font-bold mb-5 text-slate-800">Face Evaluation Task</h2>
+            <div className="space-y-4 text-slate-600 leading-relaxed">
+              <p>In the next part of the study, please imagine that you are browsing profiles on a dating app. You will see a series of face photographs, presented one at a time.</p>
+              <p>Please respond to each face as naturally as you would when using a dating app, based on your immediate impression:</p>
+              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center gap-3"><X className="shrink-0 text-rose-500" size={24} /><span>Select <strong>X</strong> if you would pass on the profile.</span></div>
+                <div className="flex items-center gap-3"><Star className="shrink-0 text-blue-400" size={24} /><span>Select <strong>☆</strong> if you would save the profile to your favourites.</span></div>
+                <div className="flex items-center gap-3"><Heart className="shrink-0 text-rose-500" size={24} /><span>Select <strong>♥</strong> if you would accept or like the profile.</span></div>
+              </div>
+              <p>There are no right or wrong answers. Please follow your first impression and avoid overthinking your decision. After each choice, you will be asked to provide two brief ratings before viewing the next face.</p>
+            </div>
+            <button onClick={() => setPhase('experiment')} className="w-full mt-8 bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition">Start Browsing (36 Photos)</button>
+          </div>
         </div>
       </Layout>
     );
