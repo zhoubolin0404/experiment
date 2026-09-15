@@ -577,7 +577,7 @@ export default function App() {
       <Layout>
         <div className="flex flex-col items-center justify-center p-6 pt-20 min-h-screen">
           <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl">
-            <h2 className="text-2xl font-bold mb-6 text-slate-800">Face Morphing Task</h2>
+            <h2 className="text-2xl font-bold mb-6 text-slate-800">Photo Instructions</h2>
             <div className="text-slate-600 space-y-4 mb-8 leading-relaxed">
               <p>In this part of the study, you will be asked to upload one photograph of yourself and one photograph of your partner.</p>
               <p>These photographs will be used solely to create computer-generated face-morph images for this study. You will then view the resulting images and complete a series of face-rating tasks.</p>
@@ -794,7 +794,7 @@ export default function App() {
       <Layout>
         <div className="flex items-center justify-center p-6 pt-20 min-h-screen">
           <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl">
-            <h2 className="text-2xl font-bold mb-5 text-slate-800">Face Evaluation Task</h2>
+            <h2 className="text-2xl font-bold mb-5 text-slate-800">Online Dating Task</h2>
             <div className="space-y-4 text-slate-600 leading-relaxed">
               <p>In the next part of the study, please imagine that you are browsing profiles on a dating app. You will see a series of face photographs, presented one at a time.</p>
               <p>Please respond to each face as naturally as you would when using a dating app, based on your immediate impression:</p>
