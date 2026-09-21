@@ -453,10 +453,19 @@ export default function App() {
           if (!response.ok) {
             const errorBody = await response.json().catch(() => ({}));
 
-            if (response.status === 422 && errorBody.code === 'FACE_QUALITY_ERROR') {
+            const requiresNewPhotographs = response.status === 422 && [
+              'FACE_QUALITY_ERROR',
+              'FACE_OCCLUSION_ERROR'
+            ].includes(errorBody.code);
+            const photoCheckUnavailable = response.status === 503 &&
+              errorBody.code === 'FACE_OCCLUSION_CHECK_UNAVAILABLE';
+
+            if (requiresNewPhotographs || photoCheckUnavailable) {
               setProcessingError(errorBody.error);
-              setSelfPhoto(null);
-              setPartnerPhoto(null);
+              if (requiresNewPhotographs) {
+                setSelfPhoto(null);
+                setPartnerPhoto(null);
+              }
               setPhotoBatchId(null);
               setPhase('photo_quality_error');
               return;
