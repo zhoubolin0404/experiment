@@ -441,6 +441,7 @@ export default function App() {
               'ngrok-skip-browser-warning': 'true' 
             },
             body: JSON.stringify({
+              participant_id: participantId,
               self_image: selfPhoto,
               partner_image: partnerPhoto,
               self_gender: selfGender,
@@ -465,6 +466,9 @@ export default function App() {
           }
           
           const result = await response.json();
+          if (result.participant_id) {
+            setParticipantId(result.participant_id);
+          }
           setStimuli(result.images);
           setPhotoBatchId(result.photo_batch_id || null);
           setPhase('instructions');
@@ -482,7 +486,7 @@ export default function App() {
       };
       processImages();
     }
-  }, [phase, apiUrl]); // 依赖 apiUrl，修改地址后会自动重试
+  }, [phase, apiUrl, participantId, selfPhoto, partnerPhoto, selfGender, partnerGender]);
 
   // 记录试次开始时间
   useEffect(() => {
@@ -882,6 +886,7 @@ export default function App() {
       ratio_level: stim.ratio_self || stim.ratio_partner || 0,
       source_db_image: stim.source_db,
       source_upload_image: stim.source_upload,
+      generated_image: stim.generated_image,
       action: action,
       reaction_time_ms: Math.round(rt),
     });
