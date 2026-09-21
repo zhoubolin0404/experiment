@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 // 引入图标库
-import { Heart, X, Star, User, ArrowRight, Download, CheckCircle, Loader2, Camera, RefreshCw, Check, UploadCloud, AlertCircle, Image as ImageIcon, ShoppingCart, Maximize, Minimize, RefreshCcw } from 'lucide-react';
+import { Heart, X, Star, User, ArrowRight, ArrowLeft, Download, CheckCircle, Loader2, Camera, RefreshCw, Check, UploadCloud, AlertCircle, Image as ImageIcon, ShoppingCart, Maximize, Minimize, RefreshCcw } from 'lucide-react';
 
 // --- 配置 ---
 // 默认地址
@@ -125,7 +125,7 @@ const Layout = ({ children }) => {
 };
 
 // --- 摄像头组件 ---
-const CameraCapture = ({ onCapture, label, instruction }) => {
+const CameraCapture = ({ onCapture, onBack, label, instruction }) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -209,8 +209,16 @@ const CameraCapture = ({ onCapture, label, instruction }) => {
     onCapture(image);
   };
 
+  const handleBack = () => {
+    stopCamera();
+    onBack();
+  };
+
   return (
     <div className="flex flex-col items-center w-full max-w-md mx-auto">
+      <button type="button" onClick={handleBack} className="self-start mb-4 flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition">
+        <ArrowLeft size={18} /> Back
+      </button>
       <h3 className="text-xl font-bold mb-2 text-slate-800">{label}</h3>
       <p className="text-sm text-slate-500 mb-4">{instruction}</p>
       
@@ -287,6 +295,7 @@ export default function App() {
   const [photoBatchId, setPhotoBatchId] = useState(null);
 
   const scrollContainerRef = useRef(null);
+  const saveRevisionRef = useRef(0);
 
   // 初始化条件
   useEffect(() => {
@@ -316,9 +325,9 @@ export default function App() {
         }
     }, [phase]);
 
-    // 正式实验开始后，试次数据发生变化时自动备份
+    // 正式实验开始后，试次数据发生变化时自动备份；回退至空数据也要覆盖旧备份。
     useEffect(() => {
-        if (data.length > 0 && phase !== 'finish') {
+        if (phase === 'experiment') {
             saveDataToServer(true);
         }
     }, [data, phase]);
@@ -336,6 +345,30 @@ export default function App() {
   const handleGenderConfirm = () => {
     // 先展示面孔合成说明，再进入照片采集。
     setPhase('face_instructions');
+  };
+
+  const handleReturnToGender = () => {
+    // 性别会影响后端选择的数据库面孔；返回时清除所有尚未使用的下游结果。
+    setSelfPhoto(null);
+    setPartnerPhoto(null);
+    setStimuli([]);
+    setPhotoBatchId(null);
+    setProcessingError('');
+    setIsDemoMode(false);
+    setPhase('gender_select');
+  };
+
+  const handleBackFromSelfPhoto = () => {
+    setSelfPhoto(null);
+    setPartnerPhoto(null);
+    setPhase('face_instructions');
+  };
+
+  const handleBackFromPartnerPhoto = () => {
+    // 返回本人照片页时要求重新确认本人照片，确保随后提交的是最后一次选择。
+    setSelfPhoto(null);
+    setPartnerPhoto(null);
+    setPhase('upload_self');
   };
 
   const handleSelfCapture = (imgData) => {
@@ -451,8 +484,12 @@ export default function App() {
       setSaveError('');
     }
 
+    const saveRevision = saveRevisionRef.current + 1;
+    saveRevisionRef.current = saveRevision;
+
     const exportData = {
       participant_id: participantId,
+      save_revision: saveRevision,
       sona_id: sonaId,
       timestamp: new Date().toISOString(),
       condition_group: condition,
@@ -466,7 +503,6 @@ export default function App() {
     };
 
     if (isDemoMode) {
-        if (!isPartial) setSaveStatus('saved');
         return true;
     }
 
@@ -488,7 +524,6 @@ export default function App() {
       if (result.participant_id) {
         setParticipantId(result.participant_id);
       }
-      if (!isPartial) setSaveStatus('saved');
       return true;
     } catch (e) {
       console.error(e);
@@ -527,6 +562,8 @@ export default function App() {
   };
 
   const handleFinishExperiment = async () => {
+    setSaveStatus('saving');
+    setSaveError('');
     const dataSaved = await saveDataToServer(false, true);
     if (!dataSaved) return;
 
@@ -577,6 +614,9 @@ export default function App() {
       <Layout>
         <div className="flex flex-col items-center justify-center p-6 pt-20 min-h-screen">
           <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl">
+            <button type="button" onClick={handleReturnToGender} className="mb-5 flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition">
+              <ArrowLeft size={18} /> Back
+            </button>
             <h2 className="text-2xl font-bold mb-6 text-slate-800">Photo Instructions</h2>
             <div className="text-slate-600 space-y-4 mb-8 leading-relaxed">
               <p>In this part of the study, you will be asked to upload one photograph of yourself and one photograph of your partner.</p>
@@ -597,7 +637,7 @@ export default function App() {
         <div className="flex flex-col items-center justify-center p-6 pt-20">
             <div className="w-full bg-white p-6 rounded-2xl shadow-xl max-w-md">
             <div className="flex justify-center mb-4"><div className="w-full h-2 bg-slate-100 rounded-full"><div className="h-full bg-rose-500 w-1/3"></div></div></div>
-            <CameraCapture key="capture-self" label="Step 1/2: Take Your Photo" instruction="Please use a white background, face the camera directly, and remove glasses, sunglasses, and face coverings. Ensure your face is clear and well-lit." onCapture={handleSelfCapture} />
+            <CameraCapture key="capture-self" label="Step 1/2: Take Your Photo" instruction="Please use a clean, uncluttered background, face the camera directly, and remove glasses, sunglasses, and face coverings. Keep a neutral expression—do not smile, make faces, or exaggerate your expression—and ensure your face is clear and well-lit." onCapture={handleSelfCapture} onBack={handleBackFromSelfPhoto} />
             </div>
         </div>
       </Layout>
@@ -610,7 +650,7 @@ export default function App() {
         <div className="flex flex-col items-center justify-center p-6 pt-20">
             <div className="w-full bg-white p-6 rounded-2xl shadow-xl max-w-md">
             <div className="flex justify-center mb-4"><div className="w-full h-2 bg-slate-100 rounded-full"><div className="h-full bg-rose-500 w-2/3"></div></div></div>
-            <CameraCapture key="capture-partner" label="Step 2/2: Take Partner's Photo" instruction="Use a clear, front-facing photo without glasses, sunglasses, or face coverings. If your partner is not present, you may upload an existing photo that meets these requirements." onCapture={handlePartnerCapture} />
+            <CameraCapture key="capture-partner" label="Step 2/2: Take Partner's Photo" instruction="Please use or upload a clear, front-facing photo without glasses, sunglasses, or face coverings. The person should have a neutral expression—no smiling, exaggerated expressions, or making faces. If your partner is not present, you may upload an existing photo that meets these requirements." onCapture={handlePartnerCapture} onBack={handleBackFromPartnerPhoto} />
             </div>
         </div>
       </Layout>
@@ -622,11 +662,10 @@ export default function App() {
       <Layout>
         <div className="flex flex-col items-center justify-center p-6 pt-20 h-screen bg-slate-900">
           <Loader2 size={64} className="animate-spin text-rose-500 mb-6" />
-          <h2 className="text-2xl font-bold mb-4 text-white text-center">Creating the Face-Morph Images...</h2>
+          <h2 className="text-2xl font-bold mb-4 text-white text-center">We’re analysing your photos and matching you with profiles to rate...</h2>
           <div className="text-slate-300 text-sm space-y-3 text-center max-w-md">
-            <p>This process usually takes about 2 minutes.</p>
+            <p>This process usually takes about 1 minute.</p>
             <p>Please keep this page open and do not refresh or close your browser.</p>
-            <p className="text-slate-400">Your photographs are being processed on the research computer.</p>
           </div>
         </div>
       </Layout>
@@ -715,7 +754,7 @@ export default function App() {
             <div className="text-slate-600 space-y-4 mb-8 text-sm leading-relaxed text-justify">
                 {condition === 'relationship' ? (
                     <>
-                        <p>To improve your relationship quality, science has proven that the following method can be very helpful. <span className="font-semibold text-rose-600 block mt-1">Let's give it a try!</span></p>
+                        <p>Before rating the profiles, please complete the following task.</p>
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                             <p className="mb-2">Please take time to think carefully about a <strong>close relationship</strong> in which you find it easy to feel close to the other person and are comfortable relying on them. </p>
                             <p>This person you are thinking about should be someone who is <strong>always there for you</strong> when you are in need.</p>
@@ -726,7 +765,7 @@ export default function App() {
                     </>
                 ) : (
                     <>
-                        <p>To improve your planning skills, science has proven that the following method can be very helpful. <span className="font-semibold text-blue-600 block mt-1">Let&apos;s give it a try!</span></p>
+                        <p>Before rating the profiles, please complete the following task.</p>
                         <p>This task requires you to identify and write for 10 minutes (in the box next page) about a recent retail experience you had. We won’t read or keep what you write (though we will check that you have written at least a few paragraphs of text), so please feel free to write in a disinhibited and unguarded way. The exercise is just about having you visualise a situation.</p>
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                             <p className="mb-2">Please take time to think carefully about a time when you visited a <strong>grocery store alone</strong> to buy grocery products.</p>
@@ -794,7 +833,9 @@ export default function App() {
       <Layout>
         <div className="flex items-center justify-center p-6 pt-20 min-h-screen">
           <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl">
-            <h2 className="text-2xl font-bold mb-5 text-slate-800">Online Dating Task</h2>
+            <button type="button" onClick={() => setPhase('questionnaire')} className="mb-5 flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition">
+              <ArrowLeft size={18} /> Back
+            </button>
             <div className="space-y-4 text-slate-600 leading-relaxed">
               <p>In the next part of the study, please imagine that you are browsing profiles on a dating app. You will see a series of face photographs, presented one at a time.</p>
               <p>Please respond to each face as naturally as you would when using a dating app, based on your immediate impression:</p>
@@ -828,9 +869,41 @@ export default function App() {
     setRatingDesirability(4); setRatingWillingness(4); setTrialStep('rating');
   };
 
+  const handleTrialBack = () => {
+    if (trialStep === 'rating') {
+      // 当前选择尚未写入 data；返回卡片后重新选择即可覆盖本次临时结果。
+      setCurrentTrialData({});
+      setRatingDesirability(4);
+      setRatingWillingness(4);
+      setTrialStep('card');
+      return;
+    }
+
+    if (currentTrialIndex === 0) {
+      setCurrentTrialData({});
+      setData([]);
+      setPhase('face_rating_instructions');
+      return;
+    }
+
+    const previousTrialIndex = currentTrialIndex - 1;
+    // 删除返回目标试次及其后的旧答案；重做后只保留最后一次结果。
+    setData(previous => previous.filter(
+      trial => trial.trial_index < previousTrialIndex + 1
+    ));
+    setCurrentTrialData({});
+    setRatingDesirability(4);
+    setRatingWillingness(4);
+    setCurrentTrialIndex(previousTrialIndex);
+    setTrialStep('card');
+  };
+
   const handleRatingSubmit = () => {
     const completeData = { ...currentTrialData, rating_desirability: ratingDesirability, rating_willingness: ratingWillingness };
-    const newData = [...data, completeData];
+    const newData = [
+      ...data.filter(trial => trial.trial_index !== completeData.trial_index),
+      completeData
+    ].sort((left, right) => left.trial_index - right.trial_index);
     setData(newData);
     if (currentTrialIndex < stimuli.length - 1) {
       setCurrentTrialIndex(prev => prev + 1);
@@ -845,6 +918,9 @@ export default function App() {
     return (
       <Layout>
         <div className="flex flex-col items-center justify-center p-4 min-h-screen">
+            <button type="button" onClick={handleTrialBack} className="w-full max-w-sm mb-4 flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition">
+              <ArrowLeft size={18} /> Back
+            </button>
             <div className="w-full max-w-sm mb-4 h-1.5 bg-slate-200 rounded-full"><div className="h-full bg-rose-500 transition-all" style={{ width: `${((currentTrialIndex+1)/stimuli.length)*100}%` }} /></div>
             <div className="relative w-full max-w-sm aspect-[3/4] bg-white rounded-3xl shadow-2xl overflow-hidden mb-6">
             <img src={currentStim.url} className="w-full h-full object-cover" alt="Stimulus" />
@@ -867,6 +943,9 @@ export default function App() {
       <Layout>
         <div className="flex flex-col items-center justify-center p-6 min-h-screen">
             <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
+            <button type="button" onClick={handleTrialBack} className="mb-5 flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition">
+              <ArrowLeft size={18} /> Back
+            </button>
             <h2 className="text-xl font-bold text-center mb-6">What do you think about him/her?</h2>
             <div className="mb-6"><label className="block mb-2 font-bold text-slate-700">Desirability: {ratingDesirability}</label><input type="range" min="1" max="7" value={ratingDesirability} onChange={e => setRatingDesirability(Number(e.target.value))} className="w-full accent-rose-500" /></div>
             <div className="mb-8"><label className="block mb-2 font-bold text-slate-700">Willingness to Date: {ratingWillingness}</label><input type="range" min="1" max="7" value={ratingWillingness} onChange={e => setRatingWillingness(Number(e.target.value))} className="w-full accent-rose-500" /></div>
@@ -884,11 +963,7 @@ export default function App() {
           <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-lg">
             <CheckCircle size={64} className="text-green-500 mx-auto mb-6" />
             <h2 className="text-2xl font-bold mb-4">Thank You</h2>
-            <p className="text-slate-600 mb-4">Thank you for taking part in this study. We sincerely appreciate your time and participation.</p>
-            <p className="text-slate-600 mb-8">
-              For more information, please visit the{' '}
-              <a href="https://www.un.org/" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-800">United Nations website</a>.
-            </p>
+            <p className="text-slate-600 mb-8">Thank you for taking part in this study. We sincerely appreciate your time and participation.</p>
 
             <button type="button" onClick={handleFinishExperiment} disabled={saveStatus === 'saving'} className={`w-full font-bold py-4 rounded-xl ${saveStatus === 'saving' ? 'bg-slate-300 text-slate-500 cursor-wait' : 'bg-slate-900 text-white hover:bg-slate-800'}`}>
               {saveStatus === 'saving' ? 'Saving Data...' : 'Finish Experiment'}
