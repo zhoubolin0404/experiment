@@ -22,6 +22,18 @@ const readSonaIdFromUrl = () => {
   return sonaId ? sonaId.trim() : '';
 };
 
+const createCompactTimestamp = () => {
+  const now = new Date();
+  const pad = value => String(value).padStart(2, '0');
+  return [
+    now.getFullYear(),
+    pad(now.getMonth() + 1),
+    pad(now.getDate()),
+    pad(now.getHours()),
+    pad(now.getMinutes())
+  ].join('');
+};
+
 const wait = (milliseconds) => new Promise(resolve => window.setTimeout(resolve, milliseconds));
 
 const requestJsonWithRetry = async (url, options, retryDelays = [0]) => {
@@ -288,6 +300,7 @@ export default function App() {
   const [profileWaitSeconds, setProfileWaitSeconds] = useState(PROFILE_MINIMUM_WAIT_SECONDS);
   // SONA 入口示例：/experiment?id=26893。该编号独立于系统参与者编号保存。
   const [sonaId] = useState(readSonaIdFromUrl);
+  const [fileStartTimestamp] = useState(createCompactTimestamp);
   // 在浏览器端立即生成稳定编号，避免多个自动保存请求并发时被后端分配到不同记录。
   const [participantId, setParticipantId] = useState(createParticipantId);
 
@@ -296,6 +309,7 @@ export default function App() {
 
   const scrollContainerRef = useRef(null);
   const saveRevisionRef = useRef(0);
+  const fileEndTimestampRef = useRef('');
 
   // 初始化条件
   useEffect(() => {
@@ -486,11 +500,16 @@ export default function App() {
 
     const saveRevision = saveRevisionRef.current + 1;
     saveRevisionRef.current = saveRevision;
+    if (isComplete && !fileEndTimestampRef.current) {
+      fileEndTimestampRef.current = createCompactTimestamp();
+    }
 
     const exportData = {
       participant_id: participantId,
       save_revision: saveRevision,
       sona_id: sonaId,
+      file_start_timestamp: fileStartTimestamp,
+      file_end_timestamp: isComplete ? fileEndTimestampRef.current : '',
       timestamp: new Date().toISOString(),
       condition_group: condition,
       gender_info: { self: selfGender, partner: partnerGender },
