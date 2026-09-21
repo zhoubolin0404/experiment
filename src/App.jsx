@@ -295,6 +295,7 @@ export default function App() {
   const [saveStatus, setSaveStatus] = useState('idle'); 
   const [isDemoMode, setIsDemoMode] = useState(false); 
   const [processingError, setProcessingError] = useState('');
+  const [mergeQueuePosition, setMergeQueuePosition] = useState(null);
   const [saveError, setSaveError] = useState('');
   const [condition, setCondition] = useState('relationship'); 
   const [profileWaitSeconds, setProfileWaitSeconds] = useState(PROFILE_MINIMUM_WAIT_SECONDS);
@@ -310,6 +311,7 @@ export default function App() {
   const scrollContainerRef = useRef(null);
   const saveRevisionRef = useRef(0);
   const fileEndTimestampRef = useRef('');
+  const mergeRequestInFlightRef = useRef(false);
 
   // 初始化条件
   useEffect(() => {
@@ -353,6 +355,7 @@ export default function App() {
     setApiUrl(tempApiUrl); // 更新实际使用的 URL
     setStimuli([]);        
     setIsDemoMode(false);  
+    setMergeQueuePosition(null);
     setPhase('processing'); // 重新触发处理流程
   };
 
@@ -427,9 +430,11 @@ export default function App() {
     return mockStimuli.sort(() => Math.random() - 0.5);
   };
 
-  // 核心：处理图片请求 (✅ 已彻底移除超时限制，并使用动态 URL)
+  // 核心：只提交一次任务，随后轮询排队/处理状态；完成时接收Base64图片。
   useEffect(() => {
-    if (phase === 'processing') {
+    if (phase === 'processing' && !mergeRequestInFlightRef.current) {
+      mergeRequestInFlightRef.current = true;
+
       const processImages = async () => {
         try {
           console.log("Connecting to backend:", apiUrl);
@@ -447,7 +452,6 @@ export default function App() {
               self_gender: selfGender,
               partner_gender: partnerGender
             }),
-            // ❌ 这里没有 signal 和 timeout，前端会一直等待后端响应
           });
           
           if (!response.ok) {
@@ -474,7 +478,39 @@ export default function App() {
             throw new Error(`Server status ${response.status}: ${errorBody.error || 'Unknown error'}`);
           }
           
-          const result = await response.json();
+          let result = await response.json();
+          const jobId = result.job_id;
+
+          while (jobId && !Array.isArray(result.images)) {
+            if (result.status === 'queued') {
+              setMergeQueuePosition(result.queue_position || 1);
+            } else if (result.status === 'processing') {
+              // 一旦获得处理名额，等待说明立即消失。
+              setMergeQueuePosition(null);
+            }
+
+            await new Promise(resolve => window.setTimeout(resolve, 1000));
+            const statusResponse = await fetch(
+              `${apiUrl}/merge_status/${encodeURIComponent(jobId)}`,
+              {
+                headers: { 'ngrok-skip-browser-warning': 'true' }
+              }
+            );
+            const statusBody = await statusResponse.json().catch(() => ({}));
+            if (!statusResponse.ok) {
+              throw new Error(
+                `Server status ${statusResponse.status}: ` +
+                (statusBody.error || 'Face processing failed')
+              );
+            }
+            result = statusBody;
+          }
+
+          if (!Array.isArray(result.images)) {
+            throw new Error('The server returned no face images.');
+          }
+
+          setMergeQueuePosition(null);
           if (result.participant_id) {
             setParticipantId(result.participant_id);
           }
@@ -484,6 +520,7 @@ export default function App() {
 
         } catch (error) {
           console.warn("Backend connection failed:", error);
+          setMergeQueuePosition(null);
           
           // 进入演示模式，但在界面上允许重试
           setIsDemoMode(true); 
@@ -491,6 +528,8 @@ export default function App() {
           setStimuli(mockData); 
           setPhotoBatchId(null);
           setPhase('instructions'); 
+        } finally {
+          mergeRequestInFlightRef.current = false;
         }
       };
       processImages();
@@ -696,7 +735,14 @@ export default function App() {
           <Loader2 size={64} className="animate-spin text-rose-500 mb-6" />
           <h2 className="text-2xl font-bold mb-4 text-white text-center">We’re analysing your photos and matching you with profiles to rate...</h2>
           <div className="text-slate-300 text-sm space-y-3 text-center max-w-md">
-            <p>This process usually takes about 1 minute.</p>
+            {mergeQueuePosition !== null ? (
+              <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 px-5 py-4 text-amber-100">
+                <p className="font-semibold">Other participants are currently being processed.</p>
+                <p className="mt-2">Your current position in the queue is {mergeQueuePosition}. Processing will start automatically.</p>
+              </div>
+            ) : (
+              <p>This process usually takes about 1 minute.</p>
+            )}
             <p>Please keep this page open and do not refresh or close your browser.</p>
           </div>
         </div>
