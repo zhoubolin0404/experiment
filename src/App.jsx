@@ -712,7 +712,7 @@ export default function App() {
             <AlertCircle size={56} className="text-amber-500 mx-auto mb-5" />
             <h2 className="text-2xl font-bold mb-4 text-slate-800">Photo Check Needed</h2>
             <p className="text-slate-600 leading-relaxed mb-4">{processingError}</p>
-            <p className="text-sm text-slate-500 mb-8">Please retake or replace both photographs. Use a well-lit, front-facing image with no glasses, sunglasses, or face coverings.</p>
+            <p className="text-sm text-slate-500 mb-8">Please retake or replace both photographs. Use a clear, well-lit, front-facing image with a clean, uncluttered background. Remove glasses, sunglasses, and face coverings, and keep a neutral expression without smiling or making faces.</p>
             <button type="button" onClick={() => setPhase('upload_self')} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition">Retake Photos</button>
           </div>
         </div>
