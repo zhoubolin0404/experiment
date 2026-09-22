@@ -7,6 +7,8 @@ import { Heart, X, Star, User, ArrowRight, ArrowLeft, Download, CheckCircle, Loa
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'https://crowd-municipal-unbroken.ngrok-free.dev';
 
 const FINAL_SAVE_RETRY_DELAYS_MS = [0, 1200, 3000];
+const SONA_STATUS_POLL_INTERVAL_MS = 1500;
+const SONA_STATUS_MAX_WAIT_MS = 120000;
 const PROFILE_MINIMUM_WAIT_SECONDS = 10;
 const PROFILE_MINIMUM_WORDS = 10;
 
@@ -312,6 +314,8 @@ export default function App() {
   const saveRevisionRef = useRef(0);
   const fileEndTimestampRef = useRef('');
   const mergeRequestInFlightRef = useRef(false);
+  const finishRequestInFlightRef = useRef(false);
+  const finalSaveAttemptedRef = useRef(false);
 
   // 初始化条件
   useEffect(() => {
@@ -543,6 +547,65 @@ export default function App() {
     }
   }, [phase, trialStep, currentTrialIndex]);
 
+  const readFinalSaveStatus = async () => {
+    const response = await fetch(`${apiUrl}/save_status`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'ngrok-skip-browser-warning': 'true'
+      },
+      body: JSON.stringify({
+        participant_id: participantId,
+        sona_id: sonaId,
+        file_start_timestamp: fileStartTimestamp
+      })
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.error || `Status check failed (${response.status}).`);
+    }
+    return body;
+  };
+
+  const waitForSonaResult = async (initialStatus) => {
+    const deadline = Date.now() + SONA_STATUS_MAX_WAIT_MS;
+    let current = initialStatus;
+    let missingChecks = 0;
+    let networkFailures = 0;
+
+    while (Date.now() < deadline) {
+      if (current.status === 'success') return;
+      if (current.status === 'failed') {
+        throw new Error(
+          `Your responses were saved, but SONA credit could not be confirmed: ${current.sona_completion?.message || 'Unknown error'}. Please click again to check and retry, or contact the researcher.`
+        );
+      }
+      if (current.status === 'unknown') {
+        throw new Error('Your responses were saved, but SONA confirmation was interrupted. Please click again to check its status and retry, or contact the researcher.');
+      }
+      if (current.status === 'not_found' || current.status === 'partial') {
+        missingChecks += 1;
+        if (missingChecks >= 5) {
+          throw new Error('Final submission could not be confirmed. Please click again to check its status before retrying.');
+        }
+      }
+
+      await wait(SONA_STATUS_POLL_INTERVAL_MS);
+      try {
+        current = await readFinalSaveStatus();
+        networkFailures = 0;
+      } catch (error) {
+        networkFailures += 1;
+        if (networkFailures >= 4) {
+          throw new Error(`Unable to check SONA confirmation: ${error.message}. Your responses may already be saved; please click again to check the status, or contact the researcher.`);
+        }
+      }
+    }
+
+    throw new Error('SONA confirmation is still pending. Please keep this page open and click again to check its status; do not start another experiment.');
+  };
+
   // 数据保存逻辑
   const saveDataToServer = async (isPartial = false, isComplete = false) => {
     if (!isPartial) {
@@ -578,6 +641,45 @@ export default function App() {
     }
 
     try {
+      if (isComplete) {
+        // 一旦提交过，任何后续点击都先查状态；仅明确失败/中断才重试授权。
+        if (finalSaveAttemptedRef.current) {
+          const current = await readFinalSaveStatus();
+          if (current.status === 'success') return true;
+          if (current.status === 'pending') {
+            await waitForSonaResult(current);
+            return true;
+          }
+          // 只有查到失败或中断，才显式授权这次重新请求 SONA。
+          exportData.retry_sona_credit = ['failed', 'unknown'].includes(current.status);
+        }
+
+        finalSaveAttemptedRef.current = true;
+        let initialStatus;
+        try {
+          const response = await fetch(`${apiUrl}/save_data`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'ngrok-skip-browser-warning': 'true'
+            },
+            body: JSON.stringify(exportData)
+          });
+          initialStatus = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(initialStatus.error || `Final submission failed (${response.status}).`);
+          }
+        } catch (error) {
+          // 提交请求可能已到达后端；不在这里盲目发送第二次最终保存。
+          console.warn('Final submission response unavailable; checking saved state:', error);
+          initialStatus = await readFinalSaveStatus();
+        }
+
+        await waitForSonaResult(initialStatus);
+        return true;
+      }
+
       const result = await requestJsonWithRetry(
         `${apiUrl}/save_data`,
         {
@@ -633,22 +735,28 @@ export default function App() {
   };
 
   const handleFinishExperiment = async () => {
-    setSaveStatus('saving');
-    setSaveError('');
-    const dataSaved = await saveDataToServer(false, true);
-    if (!dataSaved) return;
+    if (finishRequestInFlightRef.current) return;
+    finishRequestInFlightRef.current = true;
+    try {
+      setSaveStatus('saving');
+      setSaveError('');
+      const dataSaved = await saveDataToServer(false, true);
+      if (!dataSaved) return;
 
-    const photosDeleted = await deleteParticipantFaces();
-    if (!photosDeleted) {
-      setSaveStatus('error');
-      return;
+      const photosDeleted = await deleteParticipantFaces();
+      if (!photosDeleted) {
+        setSaveStatus('error');
+        return;
+      }
+
+      // 后端删除成功后，也清除浏览器内存中的照片数据
+      setSelfPhoto(null);
+      setPartnerPhoto(null);
+      setPhotoBatchId(null);
+      setPhase('end');
+    } finally {
+      finishRequestInFlightRef.current = false;
     }
-
-    // 后端删除成功后，也清除浏览器内存中的照片数据
-    setSelfPhoto(null);
-    setPartnerPhoto(null);
-    setPhotoBatchId(null);
-    setPhase('end');
   };
 
   // --- Views ---
@@ -779,7 +887,8 @@ export default function App() {
                     <AlertCircle size={20} className="shrink-0 mt-0.5"/>
                     <div>
                       <strong>Connection Failed</strong>
-                      <p className="opacity-90 mt-1">Backend not reachable. You are in Demo Mode (using mock data).</p>
+                      <p className="opacity-90 mt-1">The research server could not be reached or could not process your photographs.</p>
+                      <p className="opacity-90 mt-2">Please click Retry to reconnect. If you still cannot connect after several attempts, please contact the researcher. Demo mode uses practice images, does not save your responses, and does not award SONA credit.</p>
                     </div>
                   </div>
                   
@@ -805,7 +914,7 @@ export default function App() {
             )}
 
             <p className="text-slate-600 mb-6 text-sm">System has prepared potential matches. Please follow your intuition.</p>
-            <button onClick={() => setPhase('profile')} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl">Start Experiment</button>
+            <button onClick={() => setPhase('profile')} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl">{isDemoMode ? 'Continue in Demo Mode (No Credit)' : 'Start Experiment'}</button>
             </div>
         </div>
       </Layout>
@@ -1045,9 +1154,10 @@ export default function App() {
             <p className="text-slate-600 mb-8">Thank you for taking part in this study. We sincerely appreciate your time and participation.</p>
 
             <button type="button" onClick={handleFinishExperiment} disabled={saveStatus === 'saving'} className={`w-full font-bold py-4 rounded-xl ${saveStatus === 'saving' ? 'bg-slate-300 text-slate-500 cursor-wait' : 'bg-slate-900 text-white hover:bg-slate-800'}`}>
-              {saveStatus === 'saving' ? 'Saving Data...' : 'Finish Experiment'}
+              {saveStatus === 'saving' ? 'Saving data and confirming SONA credit...' : saveStatus === 'error' ? 'Check Status / Retry Confirmation' : 'Finish Experiment'}
             </button>
 
+            {saveStatus === 'saving' && <p className="text-sm text-slate-500 mt-4">Please keep this page open while your responses are saved and SONA credit is confirmed. Do not submit again.</p>}
             {saveStatus === 'error' && <p className="text-red-500 font-bold mt-4">{saveError || 'The final operation failed. Please keep this page open and try again.'}</p>}
             {isDemoMode && <p className="text-xs text-amber-500 mt-4">Demo mode is active; no data was sent to the research computer.</p>}
           </div>
