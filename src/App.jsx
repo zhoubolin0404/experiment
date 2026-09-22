@@ -19,6 +19,10 @@ const createParticipantId = () => {
   return `P_${Date.now()}_${randomPart}`;
 };
 
+const createMergeSessionId = () => globalThis.crypto?.randomUUID
+  ? globalThis.crypto.randomUUID().replaceAll('-', '')
+  : Array.from(globalThis.crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+
 const readSonaIdFromUrl = () => {
   const sonaId = new URLSearchParams(window.location.search).get('id');
   return sonaId ? sonaId.trim() : '';
@@ -306,6 +310,8 @@ export default function App() {
   const [fileStartTimestamp] = useState(createCompactTimestamp);
   // 在浏览器端立即生成稳定编号，避免多个自动保存请求并发时被后端分配到不同记录。
   const [participantId, setParticipantId] = useState(createParticipantId);
+  // 每次打开页面生成新会话；同一个 SONA 链接重新进入也不会恢复旧合成任务。
+  const [mergeSessionId] = useState(createMergeSessionId);
 
   // 后端为本次两张照片生成的文件夹编号
   const [photoBatchId, setPhotoBatchId] = useState(null);
@@ -314,8 +320,33 @@ export default function App() {
   const saveRevisionRef = useRef(0);
   const fileEndTimestampRef = useRef('');
   const mergeRequestInFlightRef = useRef(false);
+  const mergeSubmittedRef = useRef(false);
+  const currentPhaseRef = useRef(phase);
+  currentPhaseRef.current = phase;
   const finishRequestInFlightRef = useRef(false);
   const finalSaveAttemptedRef = useRef(false);
+
+  useEffect(() => {
+    const handlePageHide = () => {
+      if (currentPhaseRef.current !== 'processing' || !mergeSubmittedRef.current) return;
+      const body = JSON.stringify({ merge_session_id: mergeSessionId });
+      const url = `${apiUrl}/merge_cancel`;
+      const sent = navigator.sendBeacon?.(url, new Blob([body], { type: 'text/plain' }));
+      if (!sent) {
+        fetch(url, { method: 'POST', body, headers: { 'Content-Type': 'text/plain' }, keepalive: true }).catch(() => {});
+      }
+    };
+    const handlePageShow = event => {
+      // 浏览器后退缓存恢复的旧页面也必须从头开始，不能继续使用已取消任务。
+      if (event.persisted) window.location.reload();
+    };
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('pageshow', handlePageShow);
+    return () => {
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('pageshow', handlePageShow);
+    };
+  }, [apiUrl, mergeSessionId]);
 
   // 初始化条件
   useEffect(() => {
@@ -438,6 +469,7 @@ export default function App() {
   useEffect(() => {
     if (phase === 'processing' && !mergeRequestInFlightRef.current) {
       mergeRequestInFlightRef.current = true;
+      mergeSubmittedRef.current = true;
 
       const processImages = async () => {
         try {
@@ -451,6 +483,7 @@ export default function App() {
             },
             body: JSON.stringify({
               participant_id: participantId,
+              merge_session_id: mergeSessionId,
               self_image: selfPhoto,
               partner_image: partnerPhoto,
               self_gender: selfGender,
@@ -497,11 +530,34 @@ export default function App() {
             const statusResponse = await fetch(
               `${apiUrl}/merge_status/${encodeURIComponent(jobId)}`,
               {
-                headers: { 'ngrok-skip-browser-warning': 'true' }
+                headers: {
+                  'ngrok-skip-browser-warning': 'true',
+                  'X-Merge-Session': mergeSessionId
+                }
               }
             );
             const statusBody = await statusResponse.json().catch(() => ({}));
             if (!statusResponse.ok) {
+              if (statusResponse.status === 410) {
+                setMergeQueuePosition(null);
+                mergeSubmittedRef.current = false;
+                setProcessingError('This photo-processing session has ended. Please restart the experiment from the beginning.');
+                setPhase('processing_cancelled');
+                return;
+              }
+              if (statusResponse.status === 422 ||
+                (statusResponse.status === 503 && statusBody.code === 'FACE_OCCLUSION_CHECK_UNAVAILABLE')) {
+                setProcessingError(statusBody.error);
+                if (statusResponse.status === 422) {
+                  setSelfPhoto(null);
+                  setPartnerPhoto(null);
+                }
+                setMergeQueuePosition(null);
+                mergeSubmittedRef.current = false;
+                setPhotoBatchId(null);
+                setPhase('photo_quality_error');
+                return;
+              }
               throw new Error(
                 `Server status ${statusResponse.status}: ` +
                 (statusBody.error || 'Face processing failed')
@@ -520,6 +576,7 @@ export default function App() {
           }
           setStimuli(result.images);
           setPhotoBatchId(result.photo_batch_id || null);
+          mergeSubmittedRef.current = false;
           setPhase('instructions');
 
         } catch (error) {
@@ -531,6 +588,7 @@ export default function App() {
           const mockData = generateMockData();
           setStimuli(mockData); 
           setPhotoBatchId(null);
+          mergeSubmittedRef.current = false;
           setPhase('instructions'); 
         } finally {
           mergeRequestInFlightRef.current = false;
@@ -538,7 +596,7 @@ export default function App() {
       };
       processImages();
     }
-  }, [phase, apiUrl, participantId, selfPhoto, partnerPhoto, selfGender, partnerGender]);
+  }, [phase, apiUrl, participantId, mergeSessionId, selfPhoto, partnerPhoto, selfGender, partnerGender]);
 
   // 记录试次开始时间
   useEffect(() => {
@@ -851,7 +909,21 @@ export default function App() {
             ) : (
               <p>This process usually takes about 1 minute.</p>
             )}
-            <p>Please keep this page open and do not refresh or close your browser.</p>
+            <p>Please keep this page open. Closing or refreshing it cancels your place in the queue; reopening the link starts a new experiment.</p>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (phase === 'processing_cancelled') {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center p-6 min-h-screen">
+          <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-lg text-center">
+            <h2 className="text-2xl font-bold mb-4">Photo processing ended</h2>
+            <p className="mb-6">{processingError}</p>
+            <button type="button" onClick={() => window.location.reload()} className="w-full rounded-xl bg-slate-900 p-4 font-semibold text-white">Restart Experiment</button>
           </div>
         </div>
       </Layout>
