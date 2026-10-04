@@ -11,6 +11,7 @@ const SONA_STATUS_POLL_INTERVAL_MS = 1500;
 const SONA_STATUS_MAX_WAIT_MS = 120000;
 const PROFILE_MINIMUM_WAIT_SECONDS = 10;
 const PROFILE_MINIMUM_WORDS = 10;
+const MAIN_INSTRUCTION_WAIT_SECONDS = 20;
 
 const createParticipantId = () => {
   const randomPart = globalThis.crypto?.randomUUID
@@ -293,10 +294,15 @@ export default function App() {
   const [trialStartTime, setTrialStartTime] = useState(0); 
   const [data, setData] = useState([]); 
   const [stimuli, setStimuli] = useState([]); 
+  const [sourceEvaluationStimuli, setSourceEvaluationStimuli] = useState([]);
+  const [sourceEvaluationData, setSourceEvaluationData] = useState([]);
+  const [currentSourceEvaluationIndex, setCurrentSourceEvaluationIndex] = useState(0);
   
   const [currentTrialData, setCurrentTrialData] = useState({});
   const [ratingDesirability, setRatingDesirability] = useState(4); 
   const [ratingWillingness, setRatingWillingness] = useState(4);   
+  const [finalRatingDesirability, setFinalRatingDesirability] = useState(4);
+  const [finalRatingAttractiveness, setFinalRatingAttractiveness] = useState(4);
   
   const [saveStatus, setSaveStatus] = useState('idle'); 
   const [isDemoMode, setIsDemoMode] = useState(false); 
@@ -305,6 +311,8 @@ export default function App() {
   const [saveError, setSaveError] = useState('');
   const [condition, setCondition] = useState('relationship'); 
   const [profileWaitSeconds, setProfileWaitSeconds] = useState(PROFILE_MINIMUM_WAIT_SECONDS);
+  const [mainInstructionWaitSeconds, setMainInstructionWaitSeconds] = useState(MAIN_INSTRUCTION_WAIT_SECONDS);
+  const [mainInstructionsCompleted, setMainInstructionsCompleted] = useState(false);
   // SONA 入口示例：/experiment?id=26893。该编号独立于系统参与者编号保存。
   const [sonaId] = useState(readSonaIdFromUrl);
   const [fileStartTimestamp] = useState(createCompactTimestamp);
@@ -367,6 +375,8 @@ export default function App() {
         const phasesWithoutAutoSave = [
             'gender_select',
             'face_instructions',
+            'face_rating_instructions',
+            'final_face_instructions',
             'finish',
             'end'
         ];
@@ -376,19 +386,20 @@ export default function App() {
         }
     }, [phase]);
 
-    // 正式实验开始后，试次数据发生变化时自动备份；回退至空数据也要覆盖旧备份。
+    // 正式实验开始后，任一评价数据发生变化时自动备份；回退至空数据也要覆盖旧备份。
     useEffect(() => {
-        if (phase === 'experiment') {
+        if (phase === 'experiment' || phase === 'final_face_rating') {
             saveDataToServer(true);
         }
-    }, [data, phase]);
+    }, [data, sourceEvaluationData, phase]);
 
   // --- 事件处理函数 ---
 
   // 处理重试逻辑 (确保只定义这一次)
   const handleRetryConnection = () => {
     setApiUrl(tempApiUrl); // 更新实际使用的 URL
-    setStimuli([]);        
+    setStimuli([]);
+    setSourceEvaluationStimuli([]);
     setIsDemoMode(false);  
     setMergeQueuePosition(null);
     setPhase('processing'); // 重新触发处理流程
@@ -404,6 +415,14 @@ export default function App() {
     setSelfPhoto(null);
     setPartnerPhoto(null);
     setStimuli([]);
+    setSourceEvaluationStimuli([]);
+    setData([]);
+    setSourceEvaluationData([]);
+    setCurrentTrialIndex(0);
+    setCurrentSourceEvaluationIndex(0);
+    setTrialStep('card');
+    setMainInstructionWaitSeconds(MAIN_INSTRUCTION_WAIT_SECONDS);
+    setMainInstructionsCompleted(false);
     setPhotoBatchId(null);
     setProcessingError('');
     setIsDemoMode(false);
@@ -447,22 +466,55 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [phase, profileWaitSeconds]);
 
+  useEffect(() => {
+    if (phase !== 'face_rating_instructions' || mainInstructionsCompleted) return undefined;
+
+    if (mainInstructionWaitSeconds <= 0) {
+      setMainInstructionsCompleted(true);
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setMainInstructionWaitSeconds(previous => Math.max(0, previous - 1));
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [phase, mainInstructionWaitSeconds, mainInstructionsCompleted]);
+
   // 生成模拟数据
   const generateMockData = () => {
     const mockStimuli = [];
     let idCounter = 1;
     const ratios = [0, 0.2, 0.4, 0.6, 0.8, 1];
-    for(let faceIndex=1; faceIndex<=3; faceIndex++) {
-      for(const ratio of ratios) {
-        mockStimuli.push({id: `mock_self_${idCounter++}`, url: `https://api.dicebear.com/7.x/avataaars/svg?seed=self${faceIndex}`, type: 'self_morph', ratio_self: ratio, description: `Self Morph ${ratio*100}% / Face ${faceIndex} (Demo)`});
+    const addSeries = (seriesSource, faceCount) => {
+      for (let faceIndex = 1; faceIndex <= faceCount; faceIndex += 1) {
+        const faceRatios = faceIndex === 1 ? ratios : ratios.slice(0, -1);
+        for (const ratio of faceRatios) {
+          const isOriginal = ratio === 1;
+          mockStimuli.push({
+            id: `mock_${seriesSource}_${idCounter++}`,
+            url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${seriesSource}${isOriginal ? 'original' : faceIndex}`,
+            series_source: seriesSource,
+            face_role: isOriginal ? 'original' : ratio === 0 ? 'base_face' : 'blend',
+            ratio_level: ratio,
+            source_db_image: isOriginal ? null : `demo/${seriesSource}_base_${faceIndex}.jpg`
+          });
+        }
       }
-    }
-    for(let faceIndex=1; faceIndex<=3; faceIndex++) {
-      for(const ratio of ratios) {
-        mockStimuli.push({id: `mock_partner_${idCounter++}`, url: `https://api.dicebear.com/7.x/avataaars/svg?seed=partner${faceIndex}`, type: 'partner_morph', ratio_partner: ratio, description: `Partner Morph ${ratio*100}% / Face ${faceIndex} (Demo)`});
-      }
-    }
-    return mockStimuli.sort(() => Math.random() - 0.5);
+    };
+
+    addSeries('self', 2);
+    addSeries('partner', 4);
+
+    const sourceEvaluationImages = mockStimuli
+      .filter(stimulus => stimulus.face_role === 'base_face' || stimulus.face_role === 'original')
+      .map(stimulus => ({ ...stimulus, id: `final_${stimulus.id}` }))
+      .sort(() => Math.random() - 0.5);
+
+    return {
+      images: mockStimuli.sort(() => Math.random() - 0.5),
+      source_evaluation_images: sourceEvaluationImages
+    };
   };
 
   // 核心：只提交一次任务，随后轮询排队/处理状态；完成时接收Base64图片。
@@ -566,8 +618,13 @@ export default function App() {
             result = statusBody;
           }
 
-          if (!Array.isArray(result.images)) {
-            throw new Error('The server returned no face images.');
+          if (
+            !Array.isArray(result.images)
+            || result.images.length !== 32
+            || !Array.isArray(result.source_evaluation_images)
+            || result.source_evaluation_images.length !== 8
+          ) {
+            throw new Error('The server returned an incomplete face-image set.');
           }
 
           setMergeQueuePosition(null);
@@ -575,6 +632,7 @@ export default function App() {
             setParticipantId(result.participant_id);
           }
           setStimuli(result.images);
+          setSourceEvaluationStimuli(result.source_evaluation_images);
           setPhotoBatchId(result.photo_batch_id || null);
           mergeSubmittedRef.current = false;
           setPhase('instructions');
@@ -586,7 +644,8 @@ export default function App() {
           // 进入演示模式，但在界面上允许重试
           setIsDemoMode(true); 
           const mockData = generateMockData();
-          setStimuli(mockData); 
+          setStimuli(mockData.images);
+          setSourceEvaluationStimuli(mockData.source_evaluation_images);
           setPhotoBatchId(null);
           mergeSubmittedRef.current = false;
           setPhase('instructions'); 
@@ -686,10 +745,12 @@ export default function App() {
       timestamp: new Date().toISOString(),
       condition_group: condition,
       gender_info: { self: selfGender, partner: partnerGender },
+      sexual_orientation: selfGender === partnerGender ? 'homosexual' : 'heterosexual',
       photo_batch_id: photoBatchId,
       user_profile: userProfileText,
       pre_questionnaire: questionnaireAnswers,
       experiment_data: data,
+      source_face_evaluations: sourceEvaluationData,
       mode: isDemoMode ? 'demo' : 'production',
       is_complete: isComplete
     };
@@ -1088,24 +1149,49 @@ export default function App() {
   }
 
   if (phase === 'face_rating_instructions') {
+    const perspectiveInstruction = selfGender === partnerGender
+      ? ''
+      : selfGender === 'male'
+        ? 'When you see profiles of men, imagine that you are a woman browsing a dating app and rate each profile as a potential match.'
+        : 'When you see profiles of women, imagine that you are a man browsing a dating app and rate each profile as a potential match.';
+    const canStartMainTask = mainInstructionsCompleted;
+
     return (
       <Layout>
         <div className="flex items-center justify-center p-6 pt-20 min-h-screen">
           <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl">
-            <button type="button" onClick={() => setPhase('questionnaire')} className="mb-5 flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition">
+            <button type="button" onClick={() => {
+              if (!mainInstructionsCompleted) {
+                setMainInstructionWaitSeconds(MAIN_INSTRUCTION_WAIT_SECONDS);
+              }
+              setPhase('questionnaire');
+            }} className="mb-5 flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition">
               <ArrowLeft size={18} /> Back
             </button>
             <div className="space-y-4 text-slate-600 leading-relaxed">
               <p>In the next part of the study, please imagine that you are browsing profiles on a dating app. You will see a series of face photographs, presented one at a time.</p>
+              {perspectiveInstruction && (
+                <p className="rounded-xl border border-blue-200 bg-blue-50 p-4 font-semibold text-blue-900">{perspectiveInstruction}</p>
+              )}
               <p>Please respond to each face as naturally as you would when using a dating app, based on your immediate impression:</p>
               <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex items-center gap-3"><X className="shrink-0 text-rose-500" size={24} /><span>Select <strong>X</strong> if you would pass on the profile.</span></div>
                 <div className="flex items-center gap-3"><Star className="shrink-0 text-blue-400" size={24} /><span>Select <strong>☆</strong> if you would save the profile to your favourites.</span></div>
                 <div className="flex items-center gap-3"><Heart className="shrink-0 text-rose-500" size={24} /><span>Select <strong>♥</strong> if you would accept or like the profile.</span></div>
               </div>
-              <p>There are no right or wrong answers. Please follow your first impression and avoid overthinking your decision. After each choice, you will be asked to provide two brief ratings before viewing the next face.</p>
+              <div className="space-y-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 text-slate-800">
+                <p><strong>Desirability</strong> refers to how appealing you find the person as a potential dating partner.</p>
+                <p><strong>Willingness to Date</strong> refers to how willing you would be to go on a date with the person.</p>
+              </div>
+              <p>There are no right or wrong answers. Please follow your first impression and avoid overthinking your decision. After each choice, you will provide these two ratings before viewing the next face.</p>
             </div>
-            <button onClick={() => setPhase('experiment')} className="w-full mt-8 bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition">Start Browsing (36 Photos)</button>
+            <button
+              disabled={!canStartMainTask}
+              onClick={() => setPhase('experiment')}
+              className={`w-full mt-8 font-bold py-3 rounded-xl transition ${canStartMainTask ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+            >
+              {canStartMainTask ? 'Start Browsing (32 Photos)' : `Please read the instructions (${mainInstructionWaitSeconds}s)`}
+            </button>
           </div>
         </div>
       </Layout>
@@ -1118,11 +1204,10 @@ export default function App() {
     setCurrentTrialData({
       trial_index: currentTrialIndex + 1,
       stimulus_id: stim.id,
-      stimulus_type: stim.type, 
-      ratio_level: stim.ratio_self || stim.ratio_partner || 0,
-      source_db_image: stim.source_db,
-      source_upload_image: stim.source_upload,
-      generated_image: stim.generated_image,
+      series_source: stim.series_source,
+      face_role: stim.face_role,
+      ratio_level: stim.ratio_level,
+      source_db_image: stim.source_db_image,
       action: action,
       reaction_time_ms: Math.round(rt),
     });
@@ -1169,7 +1254,7 @@ export default function App() {
       setCurrentTrialIndex(prev => prev + 1);
       setTrialStep('card');
     } else {
-      setPhase('finish');
+      setPhase('final_face_instructions');
     }
   };
 
@@ -1181,12 +1266,8 @@ export default function App() {
             <button type="button" onClick={handleTrialBack} className="w-full max-w-sm mb-4 flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition">
               <ArrowLeft size={18} /> Back
             </button>
-            <div className="w-full max-w-sm mb-4 h-1.5 bg-slate-200 rounded-full"><div className="h-full bg-rose-500 transition-all" style={{ width: `${((currentTrialIndex+1)/stimuli.length)*100}%` }} /></div>
             <div className="relative w-full max-w-sm aspect-[3/4] bg-white rounded-3xl shadow-2xl overflow-hidden mb-6">
-            <img src={currentStim.url} className="w-full h-full object-cover" alt="Stimulus" />
-            <div className="absolute bottom-0 w-full bg-gradient-to-t from-black/80 to-transparent p-6 text-white pt-20">
-                <h3 className="text-sm font-light opacity-50">{currentStim.description}</h3>
-            </div>
+            <img src={currentStim.url} className="w-full h-full object-cover" alt="Face" />
             </div>
             <div className="flex items-center gap-6">
             <button onClick={() => handleCardAction('dislike')} className="w-16 h-16 bg-white rounded-full shadow-lg text-rose-500 flex items-center justify-center hover:scale-110 transition"><X size={32} /></button>
@@ -1206,11 +1287,108 @@ export default function App() {
             <button type="button" onClick={handleTrialBack} className="mb-5 flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition">
               <ArrowLeft size={18} /> Back
             </button>
-            <h2 className="text-xl font-bold text-center mb-6">What do you think about him/her?</h2>
-            <div className="mb-6"><label className="block mb-2 font-bold text-slate-700">Desirability: {ratingDesirability}</label><input type="range" min="1" max="7" value={ratingDesirability} onChange={e => setRatingDesirability(Number(e.target.value))} className="w-full accent-rose-500" /></div>
-            <div className="mb-8"><label className="block mb-2 font-bold text-slate-700">Willingness to Date: {ratingWillingness}</label><input type="range" min="1" max="7" value={ratingWillingness} onChange={e => setRatingWillingness(Number(e.target.value))} className="w-full accent-rose-500" /></div>
+            <h2 className="text-xl font-bold text-center mb-6">Please rate this person.</h2>
+            <div className="mb-6">
+              <label className="block mb-2 font-bold text-slate-700">Desirability: {ratingDesirability}</label>
+              <input type="range" min="1" max="7" value={ratingDesirability} onChange={e => setRatingDesirability(Number(e.target.value))} className="w-full accent-rose-500" />
+              <div className="mt-1 flex justify-between text-xs text-slate-500"><span>1 — Not at all desirable</span><span>7 — Extremely desirable</span></div>
+            </div>
+            <div className="mb-8">
+              <label className="block mb-2 font-bold text-slate-700">Willingness to Date: {ratingWillingness}</label>
+              <input type="range" min="1" max="7" value={ratingWillingness} onChange={e => setRatingWillingness(Number(e.target.value))} className="w-full accent-rose-500" />
+              <div className="mt-1 flex justify-between text-xs text-slate-500"><span>1 — Not at all willing</span><span>7 — Extremely willing</span></div>
+            </div>
             <button onClick={handleRatingSubmit} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl">Confirm</button>
             </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  const handleSourceEvaluationBack = () => {
+    if (currentSourceEvaluationIndex === 0) {
+      setFinalRatingDesirability(4);
+      setFinalRatingAttractiveness(4);
+      setPhase('final_face_instructions');
+      return;
+    }
+
+    const previousIndex = currentSourceEvaluationIndex - 1;
+    setSourceEvaluationData(previous => previous.filter(
+      evaluation => evaluation.evaluation_index < previousIndex + 1
+    ));
+    setFinalRatingDesirability(4);
+    setFinalRatingAttractiveness(4);
+    setCurrentSourceEvaluationIndex(previousIndex);
+  };
+
+  const handleSourceEvaluationSubmit = () => {
+    const stimulus = sourceEvaluationStimuli[currentSourceEvaluationIndex];
+    const evaluation = {
+      evaluation_index: currentSourceEvaluationIndex + 1,
+      stimulus_id: stimulus.id,
+      series_source: stimulus.series_source,
+      face_role: stimulus.face_role,
+      ratio_level: stimulus.ratio_level,
+      source_db_image: stimulus.source_db_image,
+      rating_desirability: finalRatingDesirability,
+      rating_attractiveness: finalRatingAttractiveness
+    };
+    const nextData = [
+      ...sourceEvaluationData.filter(item => item.evaluation_index !== evaluation.evaluation_index),
+      evaluation
+    ].sort((left, right) => left.evaluation_index - right.evaluation_index);
+    setSourceEvaluationData(nextData);
+
+    if (currentSourceEvaluationIndex < sourceEvaluationStimuli.length - 1) {
+      setCurrentSourceEvaluationIndex(previous => previous + 1);
+      setFinalRatingDesirability(4);
+      setFinalRatingAttractiveness(4);
+    } else {
+      setPhase('finish');
+    }
+  };
+
+  if (phase === 'final_face_instructions') {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center p-6 min-h-screen">
+          <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl">
+            <h2 className="text-2xl font-bold mb-6 text-slate-800">Final Face Ratings</h2>
+            <div className="space-y-4 text-slate-600 leading-relaxed">
+              <p>In this final part, you will see a series of faces. Please rate each face on desirability and attractiveness.</p>
+              <p><strong>Desirability</strong> has the same meaning as in the previous task.</p>
+              <p><strong>Attractiveness</strong> refers to how attractive you find the face.</p>
+            </div>
+            <button onClick={() => setPhase('final_face_rating')} className="w-full mt-8 bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition">Start Final Ratings</button>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (phase === 'final_face_rating') {
+    const currentStimulus = sourceEvaluationStimuli[currentSourceEvaluationIndex];
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center p-6 min-h-screen">
+          <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-lg">
+            <button type="button" onClick={handleSourceEvaluationBack} className="mb-5 flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition">
+              <ArrowLeft size={18} /> Back
+            </button>
+            <img src={currentStimulus.url} className="w-full max-h-[46vh] object-contain rounded-2xl bg-slate-100 mb-6" alt="Face" />
+            <div className="mb-6">
+              <label className="block mb-2 font-bold text-slate-700">Desirability: {finalRatingDesirability}</label>
+              <input type="range" min="1" max="7" value={finalRatingDesirability} onChange={event => setFinalRatingDesirability(Number(event.target.value))} className="w-full accent-rose-500" />
+              <div className="mt-1 flex justify-between text-xs text-slate-500"><span>1 — Not at all desirable</span><span>7 — Extremely desirable</span></div>
+            </div>
+            <div className="mb-8">
+              <label className="block mb-2 font-bold text-slate-700">Attractiveness: {finalRatingAttractiveness}</label>
+              <input type="range" min="1" max="7" value={finalRatingAttractiveness} onChange={event => setFinalRatingAttractiveness(Number(event.target.value))} className="w-full accent-rose-500" />
+              <div className="mt-1 flex justify-between text-xs text-slate-500"><span>1 — Not at all attractive</span><span>7 — Extremely attractive</span></div>
+            </div>
+            <button onClick={handleSourceEvaluationSubmit} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl">Confirm</button>
+          </div>
         </div>
       </Layout>
     );
