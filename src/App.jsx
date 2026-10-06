@@ -276,7 +276,8 @@ const CameraCapture = ({ onCapture, onBack, label, instruction }) => {
 // --- 主程序入口 ---
 export default function App() {
   // --- 状态管理 (State) ---
-  const [phase, setPhase] = useState('gender_select'); 
+  const [phase, setPhase] = useState('partner_consent');
+  const [partnerConsentObtained, setPartnerConsentObtained] = useState(null);
   // ✨ API 地址管理
   const [apiUrl, setApiUrl] = useState(DEFAULT_API_URL); 
   const [tempApiUrl, setTempApiUrl] = useState(DEFAULT_API_URL);
@@ -358,10 +359,11 @@ export default function App() {
 
   // 初始化条件
   useEffect(() => {
+    if (partnerConsentObtained !== true) return;
     const randomCondition = Math.random() < 0.5 ? 'relationship' : 'grocery';
     setCondition(randomCondition);
     console.log(`Experiment Condition Assigned: ${randomCondition}`);
-  }, []);
+  }, [partnerConsentObtained]);
 
     // 页面滚动和自动保存
     useEffect(() => {
@@ -373,6 +375,8 @@ export default function App() {
 
         // finish 页面由“Finish Experiment”按钮执行正式保存
         const phasesWithoutAutoSave = [
+            'partner_consent',
+            'partner_consent_required',
             'gender_select',
             'face_instructions',
             'face_rating_instructions',
@@ -746,6 +750,7 @@ export default function App() {
       condition_group: condition,
       gender_info: { self: selfGender, partner: partnerGender },
       sexual_orientation: selfGender === partnerGender ? 'homosexual' : 'heterosexual',
+      partner_consent_obtained: partnerConsentObtained === true,
       photo_batch_id: photoBatchId,
       user_profile: userProfileText,
       pre_questionnaire: questionnaireAnswers,
@@ -879,6 +884,62 @@ export default function App() {
   };
 
   // --- Views ---
+
+  if (phase === 'partner_consent') {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center p-6 pt-20 min-h-screen">
+          <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl">
+            <h1 className="text-2xl font-bold text-center mb-6 text-slate-800">Partner Photograph Consent</h1>
+            <div className="space-y-4 text-slate-600 leading-relaxed mb-8">
+              <p>Before continuing, please confirm that your partner has agreed to the use of their photograph in this study.</p>
+              <p className="font-bold text-slate-800">Have you obtained your partner&apos;s consent to use their photograph in this study?</p>
+            </div>
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setPartnerConsentObtained(true);
+                  setPhase('gender_select');
+                }}
+                className="w-full rounded-xl bg-slate-900 px-4 py-4 font-bold text-white transition hover:bg-slate-800"
+              >
+                Yes, I have obtained my partner&apos;s consent.
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPartnerConsentObtained(false);
+                  setPhase('partner_consent_required');
+                }}
+                className="w-full rounded-xl border-2 border-slate-300 bg-white px-4 py-4 font-bold text-slate-700 transition hover:bg-slate-50"
+              >
+                No, I have not obtained my partner&apos;s consent.
+              </button>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (phase === 'partner_consent_required') {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center p-6 min-h-screen">
+          <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl text-center">
+            <AlertCircle size={56} className="text-amber-500 mx-auto mb-5" />
+            <h1 className="text-2xl font-bold mb-6 text-slate-800">Partner Consent Required</h1>
+            <div className="space-y-4 text-slate-600 leading-relaxed">
+              <p>You cannot continue with this study until you have obtained your partner&apos;s consent to use their photograph.</p>
+              <p>Please obtain their consent before taking part. Once you have obtained consent, you may use the same study link to start the experiment again.</p>
+              <p>Because you have not completed the study, no credit will be awarded at this time. You may now close this page.</p>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   if (phase === 'gender_select') {
     return (
