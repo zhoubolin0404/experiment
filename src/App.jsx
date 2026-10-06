@@ -955,7 +955,7 @@ export default function App() {
               </div>
             </div>
             <div className="mb-8">
-              <label className="block text-sm font-bold text-slate-700 mb-2">Partner&apos;s Gender (or Preferred)</label>
+              <label className="block text-sm font-bold text-slate-700 mb-2">Partner&apos;s Gender</label>
               <div className="flex gap-4">
                 <button onClick={() => setPartnerGender('male')} className={`flex-1 py-3 rounded-lg border-2 ${partnerGender === 'male' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200'}`}>Male</button>
                 <button onClick={() => setPartnerGender('female')} className={`flex-1 py-3 rounded-lg border-2 ${partnerGender === 'female' ? 'border-rose-500 bg-rose-50 text-rose-700' : 'border-slate-200'}`}>Female</button>
@@ -979,8 +979,8 @@ export default function App() {
             <h2 className="text-2xl font-bold mb-6 text-slate-800">Photo Instructions</h2>
             <div className="text-slate-600 space-y-4 mb-8 leading-relaxed">
               <p>In this part of the study, you will be asked to upload one photograph of yourself and one photograph of your partner.</p>
-              <p>These photographs will be used solely to create computer-generated face-morph images for this study. You will then view the resulting images and complete a series of face-rating tasks.</p>
-              <p>For reliable face morphing, both photographs must show one clear, front-facing face without glasses, sunglasses, or face coverings.</p>
+              <p>These photographs will be used only for this study. You will then complete a series of dating-choice and face-rating tasks.</p>
+              <p>Both photographs must show one clear, front-facing face with a neutral expression. Hair, including a fringe or bangs, should be kept away from the eyes and other key facial features as much as possible. Glasses, sunglasses, and face coverings should not be worn. Use soft, even lighting that keeps the face clearly visible without strong shadows, glare, or overexposure.</p>
               <p>The photographs will be stored locally on the research computer, will be accessible only to the researcher, will not be shared with any third party, and will be permanently deleted after you complete the experiment.</p>
             </div>
             <button onClick={() => setPhase('upload_self')} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition">Continue</button>
@@ -996,7 +996,7 @@ export default function App() {
         <div className="flex flex-col items-center justify-center p-6 pt-20">
             <div className="w-full bg-white p-6 rounded-2xl shadow-xl max-w-md">
             <div className="flex justify-center mb-4"><div className="w-full h-2 bg-slate-100 rounded-full"><div className="h-full bg-rose-500 w-1/3"></div></div></div>
-            <CameraCapture key="capture-self" label="Step 1/2: Take Your Photo" instruction="Please use a clean, uncluttered background, face the camera directly, and remove glasses, sunglasses, and face coverings. Keep a neutral expression—do not smile, make faces, or exaggerate your expression—and ensure your face is clear and well-lit." onCapture={handleSelfCapture} onBack={handleBackFromSelfPhoto} />
+            <CameraCapture key="capture-self" label="Step 1/2: Take Your Photo" instruction="Please use a clean, uncluttered background and show one clear, front-facing face. Keep a neutral expression—do not smile, make faces, or exaggerate your expression. Hair, including a fringe or bangs, should be kept away from the eyes and other key facial features as much as possible. Remove glasses, sunglasses, and face coverings. Use soft, even lighting that keeps your face clearly visible without strong shadows, glare, or overexposure." onCapture={handleSelfCapture} onBack={handleBackFromSelfPhoto} />
             </div>
         </div>
       </Layout>
@@ -1009,7 +1009,7 @@ export default function App() {
         <div className="flex flex-col items-center justify-center p-6 pt-20">
             <div className="w-full bg-white p-6 rounded-2xl shadow-xl max-w-md">
             <div className="flex justify-center mb-4"><div className="w-full h-2 bg-slate-100 rounded-full"><div className="h-full bg-rose-500 w-2/3"></div></div></div>
-            <CameraCapture key="capture-partner" label="Step 2/2: Take Partner's Photo" instruction="Please use or upload a clear, front-facing photo without glasses, sunglasses, or face coverings. The person should have a neutral expression—no smiling, exaggerated expressions, or making faces. If your partner is not present, you may upload an existing photo that meets these requirements." onCapture={handlePartnerCapture} onBack={handleBackFromPartnerPhoto} />
+            <CameraCapture key="capture-partner" label="Step 2/2: Take Partner's Photo" instruction="Please use or upload a photograph with a clean, uncluttered background and one clear, front-facing face. The person should have a neutral expression—no smiling, making faces, or exaggerated expressions. Hair, including a fringe or bangs, should be kept away from the eyes and other key facial features as much as possible. Glasses, sunglasses, and face coverings should be removed. Use soft, even lighting that keeps the face clearly visible without strong shadows, glare, or overexposure. If your partner is not present, you may upload an existing photograph that meets these requirements." onCapture={handlePartnerCapture} onBack={handleBackFromPartnerPhoto} />
             </div>
         </div>
       </Layout>
@@ -1060,7 +1060,7 @@ export default function App() {
             <AlertCircle size={56} className="text-amber-500 mx-auto mb-5" />
             <h2 className="text-2xl font-bold mb-4 text-slate-800">Photo Check Needed</h2>
             <p className="text-slate-600 leading-relaxed mb-4">{processingError}</p>
-            <p className="text-sm text-slate-500 mb-8">Please retake or replace both photographs. Use a clear, well-lit, front-facing image with a clean, uncluttered background. Remove glasses, sunglasses, and face coverings, and keep a neutral expression without smiling or making faces.</p>
+            <p className="text-sm text-slate-500 mb-8">Please retake or replace both photographs. Each photograph must show one clear, front-facing face with a neutral expression against a clean, uncluttered background. Hair, including a fringe or bangs, should be kept away from the eyes and other key facial features as much as possible. Remove glasses, sunglasses, and face coverings. Use soft, even lighting that keeps the face clearly visible without strong shadows, glare, or overexposure.</p>
             <button type="button" onClick={() => setPhase('upload_self')} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition">Retake Photos</button>
           </div>
         </div>
