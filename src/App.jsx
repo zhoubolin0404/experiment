@@ -1236,9 +1236,9 @@ export default function App() {
               )}
               <p>Please respond to each face as naturally as you would when using a dating app, based on your immediate impression:</p>
               <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-center gap-3"><X className="shrink-0 text-rose-500" size={24} /><span>Select <strong>X</strong> if you would pass on the profile.</span></div>
-                <div className="flex items-center gap-3"><Star className="shrink-0 text-blue-400" size={24} /><span>Select <strong>☆</strong> if you would save the profile to your favourites.</span></div>
-                <div className="flex items-center gap-3"><Heart className="shrink-0 text-rose-500" size={24} /><span>Select <strong>♥</strong> if you would accept or like the profile.</span></div>
+                <div className="flex items-center gap-3"><X className="shrink-0 text-[#ff4458]" size={27} strokeWidth={4} /><span>Select <strong>X (Nope)</strong> if you would pass on the profile.</span></div>
+                <div className="flex items-center gap-3"><Star className="shrink-0 text-[#168dcc]" size={27} fill="#2db8ff" strokeWidth={2.5} /><span>Select <strong>★ (Super Like)</strong> if this person stands out to you and a Like does not feel strong enough.</span></div>
+                <div className="flex items-center gap-3"><Heart className="shrink-0 text-[#14a97f]" size={27} fill="#42e29d" strokeWidth={2.5} /><span>Select <strong>♥ (Like)</strong> if you are interested in the profile.</span></div>
               </div>
               <div className="space-y-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 text-slate-800">
                 <p><strong>Desirability</strong> refers to how appealing you find the person as a potential dating partner.</p>
@@ -1330,10 +1330,10 @@ export default function App() {
             <div className="relative w-full max-w-sm aspect-[3/4] bg-white rounded-3xl shadow-2xl overflow-hidden mb-6">
             <img src={currentStim.url} className="w-full h-full object-cover" alt="Face" />
             </div>
-            <div className="flex items-center gap-6">
-            <button onClick={() => handleCardAction('dislike')} className="w-16 h-16 bg-white rounded-full shadow-lg text-rose-500 flex items-center justify-center hover:scale-110 transition"><X size={32} /></button>
-            <button onClick={() => handleCardAction('superlike')} className="w-12 h-12 bg-white rounded-full shadow text-blue-400 flex items-center justify-center hover:scale-110 transition -mt-2"><Star size={24} /></button>
-            <button onClick={() => handleCardAction('like')} className="w-16 h-16 bg-rose-500 rounded-full shadow-lg text-white flex items-center justify-center hover:scale-110 transition"><Heart size={32} fill="currentColor" /></button>
+            <div className="flex items-center justify-center gap-5">
+            <button type="button" aria-label="Nope" title="Nope" onClick={() => handleCardAction('dislike')} className="w-20 h-20 bg-white rounded-full border border-slate-100 shadow-[0_10px_30px_rgba(15,23,42,0.18)] text-[#ff4458] flex items-center justify-center transition duration-200 hover:scale-110 hover:bg-[#fff7f8] active:scale-95 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#ff4458]/25"><X size={45} strokeWidth={4} /></button>
+            <button type="button" aria-label="Super Like" title="Super Like" onClick={() => handleCardAction('superlike')} className="w-16 h-16 bg-white rounded-full border border-slate-100 shadow-[0_9px_24px_rgba(15,23,42,0.16)] text-[#168dcc] flex items-center justify-center transition duration-200 hover:scale-110 hover:bg-[#f5fbff] active:scale-95 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#2db8ff]/25"><Star size={35} fill="#2db8ff" strokeWidth={2.5} /></button>
+            <button type="button" aria-label="Like" title="Like" onClick={() => handleCardAction('like')} className="w-20 h-20 bg-white rounded-full border border-slate-100 shadow-[0_10px_30px_rgba(15,23,42,0.18)] text-[#14a97f] flex items-center justify-center transition duration-200 hover:scale-110 hover:bg-[#f4fff9] active:scale-95 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#42e29d]/25"><Heart size={43} fill="#42e29d" strokeWidth={2.5} /></button>
             </div>
         </div>
       </Layout>
