@@ -978,8 +978,8 @@ export default function App() {
             </button>
             <h2 className="text-2xl font-bold mb-6 text-slate-800">Photo Instructions</h2>
             <div className="text-slate-600 space-y-4 mb-8 leading-relaxed">
-              <p>Please upload one photograph of yourself and one of your partner for this study. You will then complete dating-choice and face-rating tasks.</p>
-              <p>Both photographs must show one clear, front-facing face with a neutral expression and no glasses, sunglasses, or face coverings.</p>
+              <p>Please upload <strong>one photograph of yourself</strong> and <strong>one of your partner</strong> for this study. You will then complete dating-choice and face-rating tasks.</p>
+              <p>Both photographs must show <strong>one clear, front-facing face with a neutral expression</strong> and <strong>no glasses, sunglasses, or face coverings</strong>.</p>
               <p>The photographs will be stored locally on the research computer, will be accessible only to the researcher, will not be shared with any third party, and will be permanently deleted after you complete the experiment.</p>
             </div>
             <button onClick={() => setPhase('upload_self')} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition">Continue</button>
@@ -995,7 +995,7 @@ export default function App() {
         <div className="flex flex-col items-center justify-center p-6 pt-20">
             <div className="w-full bg-white p-6 rounded-2xl shadow-xl max-w-md">
             <div className="flex justify-center mb-4"><div className="w-full h-2 bg-slate-100 rounded-full"><div className="h-full bg-rose-500 w-1/3"></div></div></div>
-            <CameraCapture key="capture-self" label="Step 1/2: Take Your Photo" instruction="Please show one clear, front-facing face with a neutral expression and no glasses, sunglasses, or face coverings." onCapture={handleSelfCapture} onBack={handleBackFromSelfPhoto} />
+            <CameraCapture key="capture-self" label="Step 1/2: Take Your Photo" instruction={<>Please show <strong>one clear, front-facing face with a neutral expression</strong> and <strong>no glasses, sunglasses, or face coverings</strong>.</>} onCapture={handleSelfCapture} onBack={handleBackFromSelfPhoto} />
             </div>
         </div>
       </Layout>
@@ -1008,7 +1008,7 @@ export default function App() {
         <div className="flex flex-col items-center justify-center p-6 pt-20">
             <div className="w-full bg-white p-6 rounded-2xl shadow-xl max-w-md">
             <div className="flex justify-center mb-4"><div className="w-full h-2 bg-slate-100 rounded-full"><div className="h-full bg-rose-500 w-2/3"></div></div></div>
-            <CameraCapture key="capture-partner" label="Step 2/2: Take Partner's Photo" instruction="Please use or upload one clear, front-facing photograph of your partner with a neutral expression and no glasses, sunglasses, or face coverings. If your partner is not present, you may upload an existing photograph that meets these requirements." onCapture={handlePartnerCapture} onBack={handleBackFromPartnerPhoto} />
+            <CameraCapture key="capture-partner" label="Step 2/2: Take Partner's Photo" instruction={<>Please use or upload <strong>one clear, front-facing photograph of your partner with a neutral expression</strong> and <strong>no glasses, sunglasses, or face coverings</strong>. If your partner is not present, you may upload an existing photograph that meets these requirements.</>} onCapture={handlePartnerCapture} onBack={handleBackFromPartnerPhoto} />
             </div>
         </div>
       </Layout>
@@ -1028,9 +1028,9 @@ export default function App() {
                 <p className="mt-2">Your current position in the queue is {mergeQueuePosition}. Processing will start automatically.</p>
               </div>
             ) : (
-              <p>This process usually takes about 1 minute.</p>
+              <p>This process usually takes <strong>about 1 minute</strong>.</p>
             )}
-            <p>Please keep this page open. Closing or refreshing it cancels your place in the queue; reopening the link starts a new experiment.</p>
+            <p><strong>Please keep this page open.</strong> Closing or refreshing it cancels your place in the queue; reopening the link starts a new experiment.</p>
           </div>
         </div>
       </Layout>
@@ -1141,19 +1141,19 @@ export default function App() {
                         </div>
                         <p>You should now have a person in mind. Please imagine what they look like and what it is like to be in their company.</p>
                         <p>Now you have the person in mind, think about how you do not worry about being abandoned by this person or worry that this person would try to get closer to you than you are comfortable being.</p>
-                        <p>Please write about this person, your shared time together, and how this person makes you feel safe, comforted, and loved. There may be a particular time or example of these good things in the relationship that you could recall here. The task will be timed with a 10-minute countdown timer.</p>
+                        <p>Please write about this person, your shared time together, and how this person makes you feel safe, comforted, and loved. There may be a particular time or example of these good things in the relationship that you could recall here. The task will be timed with a <strong>10-minute countdown timer</strong>.</p>
                     </>
                 ) : (
                     <>
                         <p>Before rating the profiles, please complete the following task.</p>
-                        <p>This task requires you to identify and write for 10 minutes (in the box next page) about a recent retail experience you had. We won’t read or keep what you write (though we will check that you have written at least a few paragraphs of text), so please feel free to write in a disinhibited and unguarded way. The exercise is just about having you visualise a situation.</p>
+                        <p>This task requires you to identify and write for <strong>10 minutes</strong> (in the box next page) about a recent retail experience you had. We won’t read or keep what you write (though we will check that you have written at least a few paragraphs of text), so please feel free to write in a disinhibited and unguarded way. The exercise is just about having you visualise a situation.</p>
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                             <p className="mb-2">Please take time to think carefully about a time when you visited a <strong>grocery store alone</strong> to buy grocery products.</p>
                             <p>This must be a time when you were out shopping alone, with no friends or acquaintances.</p>
                         </div>
                         <p>You should now have a recent shopping time in mind. Please imagine the details of this trip.</p>
                         <p>Now you have a particular shopping trip in mind, imagine and describe the route from your home to the store, the appearance of the store, the ease with which you found what you were looking for and the groceries you purchased.</p>
-                        <p>Please write down as much as you can about this grocery store trip. The task will be timed with a 10-minute countdown timer.</p>
+                        <p>Please write down as much as you can about this grocery store trip. The task will be timed with a <strong>10-minute countdown timer</strong>.</p>
                     </>
                 )}
             </div>
@@ -1161,7 +1161,7 @@ export default function App() {
                 <label className="flex items-center justify-between gap-3 text-slate-700 font-bold mb-2">
                     <span>Your Response:</span>
                     <span className={`text-xs font-medium ${hasMinimumProfileWords ? 'text-green-600' : 'text-slate-500'}`}>
-                        {profileWordCount}/{PROFILE_MINIMUM_WORDS} words minimum
+                        {profileWordCount}/<strong>50 words minimum</strong>
                     </span>
                 </label>
                 <textarea className="w-full border border-slate-300 rounded-xl p-4 h-80 focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all resize-y text-sm leading-relaxed" 
@@ -1169,7 +1169,7 @@ export default function App() {
                     value={userProfileText} onChange={e=>setUserProfileText(e.target.value)} 
                 />
                 {!hasMinimumProfileWords && (
-                    <p className="mt-2 text-xs text-rose-500">Please write at least {PROFILE_MINIMUM_WORDS} words before continuing.</p>
+                    <p className="mt-2 text-xs text-rose-500">Please write at least <strong>50 words</strong> before continuing.</p>
                 )}
                 {!hasCompletedProfileWait && (
                     <p className="mt-2 text-xs text-slate-500">Next Step will be available in {profileWaitSeconds} seconds.</p>
@@ -1192,8 +1192,8 @@ export default function App() {
             <div ref={scrollContainerRef} className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-md overflow-y-auto max-h-[85vh]">
             <h2 className="text-xl font-bold mb-4">Ratings</h2>
             <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-relaxed text-slate-700">
-                <p className="mb-3">Please respond to the items below using the following 6-point scale, thinking about how the visualisation task you JUST PERFORMED makes you feel.</p>
-                <p className="font-medium">Thinking about the visualisation task I JUST PERFORMED makes me feel. (1 = not at all, 6 = very much)</p>
+                <p className="mb-3">Please respond to the items below using the following <strong>6-point scale</strong>, thinking about how the visualisation task you <strong>JUST PERFORMED</strong> makes you feel.</p>
+                <p className="font-medium">Thinking about the visualisation task I <strong>JUST PERFORMED</strong> makes me feel. <strong>(1 = not at all, 6 = very much)</strong></p>
             </div>
             {PRE_QUESTIONS.map((q, idx) => (
                 <div key={idx} className="mb-4 text-sm">
@@ -1210,10 +1210,10 @@ export default function App() {
 
   if (phase === 'face_rating_instructions') {
     const perspectiveInstruction = selfGender === partnerGender
-      ? ''
+      ? null
       : selfGender === 'male'
-        ? 'When you see profiles of men, imagine that you are a woman browsing a dating app and rate each profile as a potential match.'
-        : 'When you see profiles of women, imagine that you are a man browsing a dating app and rate each profile as a potential match.';
+        ? <>When you see profiles of men, <strong>imagine that you are a woman browsing a dating app</strong> and rate each profile as <strong>a potential match</strong>.</>
+        : <>When you see profiles of women, <strong>imagine that you are a man browsing a dating app</strong> and rate each profile as <strong>a potential match</strong>.</>;
     const canStartMainTask = mainInstructionsCompleted;
 
     return (
@@ -1229,17 +1229,18 @@ export default function App() {
               <ArrowLeft size={18} /> Back
             </button>
             <div className="space-y-4 text-slate-600 leading-relaxed">
-              <p>In the next part of the study, please imagine that you are browsing profiles on a dating app. You will see a series of face photographs, presented one at a time.</p>
+              <p>In the next part of the study, please imagine that you are <strong>browsing profiles on a dating app</strong>. You will see a series of face photographs, presented one at a time.</p>
               {perspectiveInstruction && (
                 <p className="rounded-xl border border-blue-200 bg-blue-50 p-4 font-semibold text-blue-900">{perspectiveInstruction}</p>
               )}
               <p>Please respond to each face as naturally as you would when using a dating app, based on your immediate impression:</p>
+              <p>After each choice, you will rate the person on <strong>desirability</strong> and <strong>willingness to date</strong>.</p>
               <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex items-center gap-3"><X className="shrink-0 text-[#ff4458]" size={27} strokeWidth={4} /><span>Select <strong>X (Nope)</strong> if you would pass on the profile.</span></div>
                 <div className="flex items-center gap-3"><Star className="shrink-0 text-[#168dcc]" size={27} fill="#2db8ff" strokeWidth={2.5} /><span>Select <strong>★ (Super Like)</strong> if this person stands out to you and a Like does not feel strong enough.</span></div>
                 <div className="flex items-center gap-3"><Heart className="shrink-0 text-[#14a97f]" size={27} fill="#42e29d" strokeWidth={2.5} /><span>Select <strong>♥ (Like)</strong> if you are interested in the profile.</span></div>
               </div>
-              <p>There are no right or wrong answers.</p>
+              <p>There are <strong>no right or wrong answers</strong>.</p>
             </div>
             <button
               disabled={!canStartMainTask}
