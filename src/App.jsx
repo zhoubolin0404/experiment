@@ -11,7 +11,7 @@ const SONA_STATUS_POLL_INTERVAL_MS = 1500;
 const SONA_STATUS_MAX_WAIT_MS = 120000;
 const PROFILE_MINIMUM_WAIT_SECONDS = 10;
 const PROFILE_MINIMUM_WORDS = 10;
-const MAIN_INSTRUCTION_WAIT_SECONDS = 20;
+const MAIN_INSTRUCTION_WAIT_SECONDS = 10;
 
 const createParticipantId = () => {
   const randomPart = globalThis.crypto?.randomUUID
@@ -978,9 +978,8 @@ export default function App() {
             </button>
             <h2 className="text-2xl font-bold mb-6 text-slate-800">Photo Instructions</h2>
             <div className="text-slate-600 space-y-4 mb-8 leading-relaxed">
-              <p>In this part of the study, you will be asked to upload one photograph of yourself and one photograph of your partner.</p>
-              <p>These photographs will be used only for this study. You will then complete a series of dating-choice and face-rating tasks.</p>
-              <p>Both photographs must show one clear, front-facing face with a neutral expression. Hair, including a fringe or bangs, should be kept away from the eyes and other key facial features as much as possible. Glasses, sunglasses, and face coverings should not be worn. Use soft, even lighting that keeps the face clearly visible without strong shadows, glare, or overexposure.</p>
+              <p>Please upload one photograph of yourself and one of your partner for this study. You will then complete dating-choice and face-rating tasks.</p>
+              <p>Both photographs must show one clear, front-facing face with a neutral expression and no glasses, sunglasses, or face coverings.</p>
               <p>The photographs will be stored locally on the research computer, will be accessible only to the researcher, will not be shared with any third party, and will be permanently deleted after you complete the experiment.</p>
             </div>
             <button onClick={() => setPhase('upload_self')} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition">Continue</button>
@@ -996,7 +995,7 @@ export default function App() {
         <div className="flex flex-col items-center justify-center p-6 pt-20">
             <div className="w-full bg-white p-6 rounded-2xl shadow-xl max-w-md">
             <div className="flex justify-center mb-4"><div className="w-full h-2 bg-slate-100 rounded-full"><div className="h-full bg-rose-500 w-1/3"></div></div></div>
-            <CameraCapture key="capture-self" label="Step 1/2: Take Your Photo" instruction="Please use a clean, uncluttered background and show one clear, front-facing face. Keep a neutral expression—do not smile, make faces, or exaggerate your expression. Hair, including a fringe or bangs, should be kept away from the eyes and other key facial features as much as possible. Remove glasses, sunglasses, and face coverings. Use soft, even lighting that keeps your face clearly visible without strong shadows, glare, or overexposure." onCapture={handleSelfCapture} onBack={handleBackFromSelfPhoto} />
+            <CameraCapture key="capture-self" label="Step 1/2: Take Your Photo" instruction="Please show one clear, front-facing face with a neutral expression and no glasses, sunglasses, or face coverings." onCapture={handleSelfCapture} onBack={handleBackFromSelfPhoto} />
             </div>
         </div>
       </Layout>
@@ -1009,7 +1008,7 @@ export default function App() {
         <div className="flex flex-col items-center justify-center p-6 pt-20">
             <div className="w-full bg-white p-6 rounded-2xl shadow-xl max-w-md">
             <div className="flex justify-center mb-4"><div className="w-full h-2 bg-slate-100 rounded-full"><div className="h-full bg-rose-500 w-2/3"></div></div></div>
-            <CameraCapture key="capture-partner" label="Step 2/2: Take Partner's Photo" instruction="Please use or upload a photograph with a clean, uncluttered background and one clear, front-facing face. The person should have a neutral expression—no smiling, making faces, or exaggerated expressions. Hair, including a fringe or bangs, should be kept away from the eyes and other key facial features as much as possible. Glasses, sunglasses, and face coverings should be removed. Use soft, even lighting that keeps the face clearly visible without strong shadows, glare, or overexposure. If your partner is not present, you may upload an existing photograph that meets these requirements." onCapture={handlePartnerCapture} onBack={handleBackFromPartnerPhoto} />
+            <CameraCapture key="capture-partner" label="Step 2/2: Take Partner's Photo" instruction="Please use or upload one clear, front-facing photograph of your partner with a neutral expression and no glasses, sunglasses, or face coverings. If your partner is not present, you may upload an existing photograph that meets these requirements." onCapture={handlePartnerCapture} onBack={handleBackFromPartnerPhoto} />
             </div>
         </div>
       </Layout>
@@ -1060,7 +1059,7 @@ export default function App() {
             <AlertCircle size={56} className="text-amber-500 mx-auto mb-5" />
             <h2 className="text-2xl font-bold mb-4 text-slate-800">Photo Check Needed</h2>
             <p className="text-slate-600 leading-relaxed mb-4">{processingError}</p>
-            <p className="text-sm text-slate-500 mb-8">Please retake or replace both photographs. Each photograph must show one clear, front-facing face with a neutral expression against a clean, uncluttered background. Hair, including a fringe or bangs, should be kept away from the eyes and other key facial features as much as possible. Remove glasses, sunglasses, and face coverings. Use soft, even lighting that keeps the face clearly visible without strong shadows, glare, or overexposure.</p>
+            <p className="text-sm text-slate-500 mb-8">Please retake or replace both photographs. Each photograph must show one clear, front-facing face with a neutral expression and no glasses, sunglasses, or face coverings.</p>
             <button type="button" onClick={() => setPhase('upload_self')} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition">Retake Photos</button>
           </div>
         </div>
@@ -1240,11 +1239,7 @@ export default function App() {
                 <div className="flex items-center gap-3"><Star className="shrink-0 text-[#168dcc]" size={27} fill="#2db8ff" strokeWidth={2.5} /><span>Select <strong>★ (Super Like)</strong> if this person stands out to you and a Like does not feel strong enough.</span></div>
                 <div className="flex items-center gap-3"><Heart className="shrink-0 text-[#14a97f]" size={27} fill="#42e29d" strokeWidth={2.5} /><span>Select <strong>♥ (Like)</strong> if you are interested in the profile.</span></div>
               </div>
-              <div className="space-y-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 text-slate-800">
-                <p><strong>Desirability</strong> refers to how appealing you find the person as a potential dating partner.</p>
-                <p><strong>Willingness to Date</strong> refers to how willing you would be to go on a date with the person.</p>
-              </div>
-              <p>There are no right or wrong answers. Please follow your first impression and avoid overthinking your decision. After each choice, you will provide these two ratings before viewing the next face.</p>
+              <p>There are no right or wrong answers.</p>
             </div>
             <button
               disabled={!canStartMainTask}
@@ -1348,16 +1343,16 @@ export default function App() {
             <button type="button" onClick={handleTrialBack} className="mb-5 flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition">
               <ArrowLeft size={18} /> Back
             </button>
-            <h2 className="text-xl font-bold text-center mb-6">Please rate this person.</h2>
+            <h2 className="text-xl font-bold text-center mb-6">Please rate this person as a potential dating partner.</h2>
             <div className="mb-6">
               <label className="block mb-2 font-bold text-slate-700">Desirability: {ratingDesirability}</label>
               <input type="range" min="1" max="7" value={ratingDesirability} onChange={e => setRatingDesirability(Number(e.target.value))} className="w-full accent-rose-500" />
-              <div className="mt-1 flex justify-between text-xs text-slate-500"><span>1 — Not at all desirable</span><span>7 — Extremely desirable</span></div>
+              <div className="mt-1 flex justify-between text-xs text-slate-500"><span>1 — Extremely Undesirable</span><span>7 — Extremely Desirable</span></div>
             </div>
             <div className="mb-8">
               <label className="block mb-2 font-bold text-slate-700">Willingness to Date: {ratingWillingness}</label>
               <input type="range" min="1" max="7" value={ratingWillingness} onChange={e => setRatingWillingness(Number(e.target.value))} className="w-full accent-rose-500" />
-              <div className="mt-1 flex justify-between text-xs text-slate-500"><span>1 — Not at all willing</span><span>7 — Extremely willing</span></div>
+              <div className="mt-1 flex justify-between text-xs text-slate-500"><span>1 — Extremely Unwilling</span><span>7 — Extremely Willing</span></div>
             </div>
             <button onClick={handleRatingSubmit} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl">Confirm</button>
             </div>
@@ -1417,9 +1412,7 @@ export default function App() {
           <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-2xl">
             <h2 className="text-2xl font-bold mb-6 text-slate-800">Final Face Ratings</h2>
             <div className="space-y-4 text-slate-600 leading-relaxed">
-              <p>In this final part, you will see a series of faces. Please rate each face on desirability and attractiveness.</p>
-              <p><strong>Desirability</strong> has the same meaning as in the previous task.</p>
-              <p><strong>Attractiveness</strong> refers to how attractive you find the face.</p>
+              <p>Please rate each face on desirability and attractiveness.</p>
             </div>
             <button onClick={() => setPhase('final_face_rating')} className="w-full mt-8 bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition">Start Final Ratings</button>
           </div>
@@ -1441,12 +1434,12 @@ export default function App() {
             <div className="mb-6">
               <label className="block mb-2 font-bold text-slate-700">Desirability: {finalRatingDesirability}</label>
               <input type="range" min="1" max="7" value={finalRatingDesirability} onChange={event => setFinalRatingDesirability(Number(event.target.value))} className="w-full accent-rose-500" />
-              <div className="mt-1 flex justify-between text-xs text-slate-500"><span>1 — Not at all desirable</span><span>7 — Extremely desirable</span></div>
+              <div className="mt-1 flex justify-between text-xs text-slate-500"><span>1 — Extremely Undesirable</span><span>7 — Extremely Desirable</span></div>
             </div>
             <div className="mb-8">
               <label className="block mb-2 font-bold text-slate-700">Attractiveness: {finalRatingAttractiveness}</label>
               <input type="range" min="1" max="7" value={finalRatingAttractiveness} onChange={event => setFinalRatingAttractiveness(Number(event.target.value))} className="w-full accent-rose-500" />
-              <div className="mt-1 flex justify-between text-xs text-slate-500"><span>1 — Not at all attractive</span><span>7 — Extremely attractive</span></div>
+              <div className="mt-1 flex justify-between text-xs text-slate-500"><span>1 — Extremely Unattractive</span><span>7 — Extremely Attractive</span></div>
             </div>
             <button onClick={handleSourceEvaluationSubmit} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl">Confirm</button>
           </div>
