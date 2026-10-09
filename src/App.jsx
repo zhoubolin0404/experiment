@@ -9,8 +9,8 @@ const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'https://crowd-municipal
 const FINAL_SAVE_RETRY_DELAYS_MS = [0, 1200, 3000];
 const SONA_STATUS_POLL_INTERVAL_MS = 1500;
 const SONA_STATUS_MAX_WAIT_MS = 120000;
-const PROFILE_MINIMUM_WAIT_SECONDS = 10;
-const PROFILE_MINIMUM_WORDS = 10;
+const PROFILE_MINIMUM_WAIT_SECONDS = 10 * 60;
+const PROFILE_MINIMUM_WORDS = 50;
 const MAIN_INSTRUCTION_WAIT_SECONDS = 10;
 
 const createParticipantId = () => {
@@ -1136,8 +1136,7 @@ export default function App() {
                     <>
                         <p>Before rating the profiles, please complete the following task.</p>
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                            <p className="mb-2">Please take time to think carefully about a <strong>close relationship</strong> in which you find it easy to feel close to the other person and are comfortable relying on them. </p>
-                            <p>This person you are thinking about should be someone who is <strong>always there for you</strong> when you are in need.</p>
+                            <p>Please take time to think carefully about a close relationship in which you find it <strong><em>easy to feel close</em></strong> to the other person and are <strong><em>comfortable relying on them</em></strong>. This person you are thinking about should be <strong><em>someone who is always there for you</em></strong> when you are in need.</p>
                         </div>
                         <p>You should now have a person in mind. Please imagine what they look like and what it is like to be in their company.</p>
                         <p>Now you have the person in mind, think about how you do not worry about being abandoned by this person or worry that this person would try to get closer to you than you are comfortable being.</p>
@@ -1148,7 +1147,7 @@ export default function App() {
                         <p>Before rating the profiles, please complete the following task.</p>
                         <p>This task requires you to identify and write for <strong>10 minutes</strong> (in the box next page) about a recent retail experience you had. We won’t read or keep what you write (though we will check that you have written at least a few paragraphs of text), so please feel free to write in a disinhibited and unguarded way. The exercise is just about having you visualise a situation.</p>
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                            <p className="mb-2">Please take time to think carefully about a time when you visited a <strong>grocery store alone</strong> to buy grocery products.</p>
+                            <p className="mb-2">Please take time to think carefully about a time when you visited a grocery store <strong>alone</strong> to buy grocery products.</p>
                             <p>This must be a time when you were out shopping alone, with no friends or acquaintances.</p>
                         </div>
                         <p>You should now have a recent shopping time in mind. Please imagine the details of this trip.</p>
